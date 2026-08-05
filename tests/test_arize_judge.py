@@ -52,10 +52,11 @@ class FakeRunner:
         raise AssertionError(f"unexpected ax command: {args}")
 
 
-def _run(name, label, explanation="because"):
+def _run(name, label, explanation="because", scan_run_id="run1"):
     return {
         "additional_properties": {
             "skill_name": name,
+            "scan_run_id": scan_run_id,
             "eval.skill_safety.label": label,
             "eval.skill_safety.explanation": explanation,
         }
@@ -143,3 +144,62 @@ def test_cli_failure_raises():
 
     with pytest.raises(JudgeError):
         judge_skills([BENIGN], CONFIG, "run1", runner=boom)
+
+
+def test_present_row_with_no_label_is_a_failure_not_a_pass():
+    """A row exists for the skill, but the label key itself is absent.
+
+    Falling through to `label == "FAIL"` would silently pass this skill; only
+    an explicit PASS may clear it.
+    """
+    no_label = {
+        "additional_properties": {
+            "skill_name": "dialog-summary",
+            "scan_run_id": "run1",
+            "eval.skill_safety.explanation": "unclear",
+        }
+    }
+    runner = FakeRunner([no_label])
+    findings = judge_skills([BENIGN], CONFIG, "run1", runner=runner)
+    assert len(findings) == 1
+    assert findings[0].skill == "dialog-summary"
+    assert "not judged" in findings[0].detail.lower()
+
+
+def test_stale_scan_run_id_is_ignored_regardless_of_row_order():
+    """The dataset is shared across runs; only this run's own rows count."""
+    stale_fail = _run("dialog-summary", "FAIL", "stale", scan_run_id="old-run")
+    current_pass = _run("dialog-summary", "PASS", scan_run_id="run1")
+
+    runner_stale_first = FakeRunner([stale_fail, current_pass])
+    assert judge_skills([BENIGN], CONFIG, "run1", runner=runner_stale_first) == []
+
+    runner_current_first = FakeRunner([current_pass, stale_fail])
+    assert judge_skills([BENIGN], CONFIG, "run1", runner=runner_current_first) == []
+
+
+def test_appended_examples_carry_scan_run_id():
+    runner = FakeRunner([_run("dialog-summary", "PASS")])
+    judge_skills([BENIGN], CONFIG, "run1", runner=runner)
+    append_cmd = next(c for c in runner.commands if "append" in c)
+    payload = json.loads(append_cmd[append_cmd.index("--json") + 1])
+    assert payload[0]["scan_run_id"] == "run1"
+
+
+def test_mutating_call_failure_is_not_retried():
+    """A failed mutating call (e.g. dataset append) must be attempted exactly
+    once: retrying a call the server may have already accepted risks
+    duplicating the resource. It should fail closed on the first error."""
+    commands = []
+
+    def flaky(args, timeout=900):
+        commands.append(args)
+        if "append" in " ".join(args):
+            raise JudgeError("boom")
+        raise AssertionError("pipeline should have stopped after the append failure")
+
+    with pytest.raises(JudgeError):
+        judge_skills([BENIGN], CONFIG, "run1", runner=flaky)
+
+    append_calls = [c for c in commands if "append" in " ".join(c)]
+    assert len(append_calls) == 1

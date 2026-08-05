@@ -106,27 +106,43 @@ def judge_skills(
 ) -> list[Finding]:
     """Judge every skill in one Arize round trip.
 
-    Returns a Finding for each skill the judge labelled FAIL, and for each skill
-    that came back with no verdict at all — an unjudged skill is not a passing
-    skill.
+    Returns a Finding for each skill the judge labelled anything other than
+    PASS, and for each skill that came back with no row for this run at all
+    — an unjudged skill is not a passing skill.
+
+    The dataset is shared and long-lived, so every appended example carries
+    this call's run_id (`scan_run_id`) and the export is filtered back down
+    to only that run's rows before verdicts are read — otherwise a stale row
+    left by an earlier run with the same skill name could be picked up
+    instead of (or ahead of) the current one.
+
+    The four mutating calls below (dataset append, experiment run, task
+    creation, trigger) are deliberately *not* retried: if `ax` dies locally
+    after the server already accepted the request, retrying would duplicate
+    the resource. They fail closed on the first error instead — a JudgeError
+    propagates immediately and the caller treats that as FAIL. Only the two
+    read-only calls (wait-for-run, export) are retried.
     """
     if not skills:
         return []
 
-    examples = [{"skill_name": s.name, "skill_body": s.body} for s in skills]
-    _with_retries(
-        runner,
+    examples = [
+        {"skill_name": s.name, "skill_body": s.body, "scan_run_id": run_id}
+        for s in skills
+    ]
+    runner(
         ["datasets", "append", config.dataset_id, "--json", json.dumps(examples)],
+        timeout=900,
     )
 
-    experiment = _with_retries(
-        runner,
+    experiment = runner(
         [
             "experiments", "run",
             "--name", f"skill-scan-{run_id}",
             "--dataset", config.dataset_id,
             "--task", str(ECHO_TASK),
         ],
+        timeout=900,
     )
     experiment_id = experiment["id"]
 
@@ -141,8 +157,7 @@ def judge_skills(
             }
         ]
     )
-    task = _with_retries(
-        runner,
+    task = runner(
         [
             "tasks", "create-evaluation",
             "--name", f"skill-scan-{run_id}",
@@ -152,9 +167,10 @@ def judge_skills(
             "--space", config.space_id,
             "--evaluators", evaluators,
         ],
+        timeout=900,
     )
 
-    triggered = _with_retries(runner, ["tasks", "trigger-run", task["id"]])
+    triggered = runner(["tasks", "trigger-run", task["id"]], timeout=900)
 
     # wait-for-run takes the run id only; passing the task id as well is an error.
     finished = _with_retries(
@@ -173,11 +189,16 @@ def judge_skills(
     label_key = f"eval.{config.eval_column}.label"
     explanation_key = f"eval.{config.eval_column}.explanation"
 
-    verdicts: dict[str, tuple[str, str]] = {}
+    verdicts: dict[str, tuple[str | None, str]] = {}
     for entry in runs:
         props = entry.get("additional_properties") or entry
         name = props.get("skill_name")
         if name is None:
+            continue
+        # Only this run's own rows are eligible: the dataset is shared and
+        # long-lived, so a stale row from an earlier run with the same skill
+        # name must never be read as this run's verdict.
+        if props.get("scan_run_id") != run_id:
             continue
         verdicts[name] = (props.get(label_key), props.get(explanation_key) or "")
 
@@ -194,15 +215,22 @@ def judge_skills(
             )
             continue
         label, explanation = verdicts[skill.name]
-        if label == "FAIL":
-            findings.append(
-                Finding(
-                    skill=skill.name,
-                    source="judge",
-                    severity="critical",
-                    detail=explanation or "judged unsafe",
-                )
+        # Anything other than an explicit PASS is a failure: a missing,
+        # empty, or unrecognized label is not evidence of safety.
+        if label == "PASS":
+            continue
+        if not label:
+            detail = "skill was not judged: no label was returned"
+        else:
+            detail = explanation or "judged unsafe"
+        findings.append(
+            Finding(
+                skill=skill.name,
+                source="judge",
+                severity="critical",
+                detail=detail,
             )
+        )
     return findings
 
 
