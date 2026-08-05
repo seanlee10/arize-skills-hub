@@ -1,0 +1,41 @@
+# 결정적 스캔 패턴. 허브 오너 소유 — CODEOWNERS로 보호된다.
+#
+# 룰은 오탐이 거의 없도록 좁게 큐레이션한다. 넓게 잡아야 하는 판단은
+# 룰이 아니라 policy/static-scan.md 의 judge 프롬프트에 맡긴다.
+# 매칭은 항상 대소문자를 무시한다.
+
+rules:
+  - id: instruction-override
+    severity: critical
+    description: 상위 시스템 지시를 무효화하려는 전형적 인젝션 문구
+    pattern: '\b(ignore|disregard|forget)\s+(all\s+)?(previous|prior|above|earlier)\s+(instruction|instructions|prompt|prompts|rule|rules)\b'
+
+  - id: instruction-override-persona
+    severity: critical
+    description: 시스템 프롬프트를 무시하고 다른 역할을 강제하려는 시도
+    pattern: '\byou\s+are\s+no\s+longer\s+(bound|restricted|limited)\b'
+
+  - id: exfiltration-http-client
+    severity: critical
+    description: 처리 중인 데이터를 외부 엔드포인트로 전송하는 지시
+    pattern: '\b(curl|wget|httpie)\b[^\n]{0,80}\bhttps?://'
+
+  - id: exfiltration-verb
+    severity: critical
+    description: 데이터 유출을 직접 지시하는 동사
+    pattern: '\b(exfiltrate|leak|smuggle)\b[^\n]{0,60}\b(data|content|conversation|transcript|file|files)\b'
+
+  - id: credential-access
+    severity: high
+    description: 자격증명·비밀값에 대한 직접 참조
+    pattern: '(api[_\- ]?key|secret[_\- ]?key|access[_\- ]?token|bearer[_\- ]?token|private[_\- ]?key)\b'
+
+  - id: credential-file-access
+    severity: high
+    description: 자격증명이 저장된 경로에 대한 접근 지시
+    pattern: '(\.env\b|~/\.ssh|~/\.aws/credentials|id_rsa\b)'
+
+  - id: obfuscated-payload
+    severity: high
+    description: 난독화된 페이로드를 디코딩해 실행하려는 시도
+    pattern: '\bbase64\s+(-d|--decode)\b|\becho\b[^\n]{0,40}\|\s*(sh|bash)\b'
