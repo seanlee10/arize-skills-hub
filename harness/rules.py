@@ -1,4 +1,4 @@
-"""policy/rules.yaml 을 로드해 SKILL.md 본문에 매칭한다."""
+"""Load policy/rules.yaml and match it against SKILL.md text."""
 
 import re
 from dataclasses import dataclass
@@ -18,10 +18,10 @@ class Rule:
 
 
 def load_rules(path: str | Path) -> list[Rule]:
-    """룰 파일을 읽어 컴파일된 Rule 목록을 돌려준다.
+    """Read the rules file and return compiled Rule objects.
 
-    파일이 없거나 형식이 깨졌으면 예외를 올린다 — 게이트가 조용히
-    무력화되는 것보다 시끄럽게 깨지는 편이 안전하다.
+    Raises if the file is missing or malformed — a gate that silently disables
+    itself is worse than one that breaks loudly.
     """
     raw = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
     entries = raw["rules"]
@@ -42,7 +42,7 @@ def load_rules(path: str | Path) -> list[Rule]:
 
 
 def scan_text(text: str, rules: list[Rule], skill: str) -> list[Finding]:
-    """본문에 매칭되는 모든 룰을 Finding 으로 돌려준다."""
+    """Return a Finding for every rule that matches the text."""
     findings = []
     for rule in rules:
         match = rule.pattern.search(text)

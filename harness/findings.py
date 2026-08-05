@@ -1,4 +1,4 @@
-"""스캔 결과의 공통 표현과 FAIL 판정 규칙."""
+"""The shared result type for a scan, and the rule that decides failure."""
 
 from dataclasses import dataclass
 
@@ -7,9 +7,10 @@ SEVERITIES = ("none", "low", "medium", "high", "critical")
 
 @dataclass(frozen=True)
 class Finding:
-    """룰과 judge의 결과를 같은 형태로 표현한다.
+    """One violation, from either the rules or the judge.
 
-    severity는 보고와 우선순위 표시 전용이며 FAIL 여부를 결정하지 않는다.
+    severity is for reporting and prioritisation only; it does not decide the
+    verdict.
     """
 
     skill: str
@@ -19,9 +20,9 @@ class Finding:
 
 
 def has_failure(findings: list[Finding]) -> bool:
-    """finding이 하나라도 있으면 FAIL.
+    """Any finding at all is a failure.
 
-    severity 임계값을 두지 않는 이유는, 임계값이 생기는 순간
-    "어느 선까지 통과시킬 것인가"라는 협상 여지가 생기고 게이트가 약해지기 때문이다.
+    There is deliberately no severity threshold: the moment a threshold exists,
+    so does an argument about where to set it, and the gate gets weaker.
     """
     return len(findings) > 0
