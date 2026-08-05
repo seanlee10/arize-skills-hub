@@ -1,0 +1,14 @@
+# Arize resources backing the static scan gate. Hub-owner-owned.
+#
+# These are configuration, not secrets: the API key arrives via the
+# ARIZE_API_KEY environment variable. Changing an id here repoints the gate at
+# a different evaluator or dataset, which is why the file is protected by
+# CODEOWNERS.
+
+space_id: U3BhY2U6Mjc2Nzc6eVVRRA==
+dataset_id: RGF0YXNldDozNTg5NjE6bmpRWQ==
+evaluator_id: RXZhbHVhdG9yOjEyNDU0OkttS0k=
+
+# The evaluator's template name. Verdict fields in the experiment export are
+# prefixed with it: eval.<eval_column>.label, .score, .explanation
+eval_column: skill_safety
