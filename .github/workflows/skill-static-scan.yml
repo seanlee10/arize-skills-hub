@@ -35,7 +35,13 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: python -m pip install -r requirements.txt
+        # Two steps on purpose: arize-ax-cli pins arize==8.43.1, which cannot
+        # deserialize the experiments this scan creates. Resolving both pins at
+        # once is impossible, but pip accepts the upgrade applied afterwards.
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pip install --upgrade arize==8.44.0
+          python -c "import importlib.metadata as m; print('arize', m.version('arize'), 'ax', m.version('arize-ax-cli'))"
 
       - name: Run static scan
         env:

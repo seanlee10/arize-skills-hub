@@ -1,5 +1,10 @@
-anthropic>=0.116.0
-arize==8.44.0
+# arize-ax-cli 0.28.1 pins arize==8.43.1, but 8.43.1 cannot deserialize the
+# experiments this scan creates — its Experiment model rejects the space_id the
+# server now returns, which breaks `ax experiments run` and `ax experiments
+# list`. The working combination is the CLI at 0.28.1 with arize upgraded to
+# 8.44.0 on top, which pip permits as an upgrade but cannot reach by resolving
+# both pins at once. The workflow therefore installs this file first and then
+# upgrades arize; see .github/workflows/skill-static-scan.yml.
 arize-ax-cli==0.28.1
 pyyaml>=6.0
 pytest>=8.0

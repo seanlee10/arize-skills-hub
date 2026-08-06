@@ -174,6 +174,13 @@ Required repository secrets: `ARIZE_API_KEY` and `SLACK_WEBHOOK_URL`. Both must
 be **secrets**, never repository variables — variables are readable through the
 API and are not masked in workflow logs, and this repository is public.
 
-Toolchain: `arize` 8.44.0 with `arize-ax-cli` 0.28.1. The CLI's dependency pin
-still names `arize==8.43.1`, so pip reports a conflict; it is cosmetic, and 8.43.1
-cannot deserialize the experiments the scan creates.
+Toolchain: `arize` 8.44.0 with `arize-ax-cli` 0.28.1. The CLI pins
+`arize==8.43.1`, but 8.43.1 cannot deserialize the experiments the scan creates —
+its `Experiment` model rejects the `space_id` the server now returns, which
+breaks `ax experiments run` and `ax experiments list`.
+
+Those two pins cannot be resolved together, so installation is two steps:
+`pip install -r requirements.txt`, then `pip install --upgrade arize==8.44.0`.
+pip accepts the upgrade even though it could not have reached that state by
+resolving both constraints at once. Do not collapse this into a single
+`requirements.txt` — it fails with `ResolutionImpossible`.
