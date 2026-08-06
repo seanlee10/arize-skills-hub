@@ -141,3 +141,40 @@ def test_shallow_clone_parent_failure_emits_warning(tmp_path: Path, capsys):
     assert result is None
     captured = capsys.readouterr()
     assert "Warning: Failed to find parent commit for scanning" in captured.err
+
+
+def test_damaged_refs_non_shallow_failure_emits_warning(tmp_path: Path, capsys):
+    """A repo with damaged refs (parent object missing) emits warning.
+
+    This tests the non-shallow failure case: HEAD has a parent that exists
+    in the commit graph but whose object was removed, causing HEAD^ to fail.
+    """
+    # Create a repo with two commits
+    repo = tmp_path / "damaged"
+    repo.mkdir(parents=True, exist_ok=True)
+    _run(repo, "git", "init", "-b", "main")
+    _run(repo, "git", "config", "user.email", "t@example.com")
+    _run(repo, "git", "config", "user.name", "T")
+    _write_skill(repo, "a")
+    _commit(repo, "first")
+    _write_skill(repo, "b")
+    _commit(repo, "second")
+
+    # Get the hash of the first commit (parent of HEAD)
+    parent_hash = subprocess.run(
+        ["git", "rev-parse", "HEAD^"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+
+    # Remove the parent object from the git object database
+    parent_object = repo / ".git" / "objects" / parent_hash[:2] / parent_hash[2:]
+    parent_object.unlink()
+
+    # Now HEAD^ should fail because the parent object is missing
+    result = changed_paths(repo)
+    assert result is None
+    captured = capsys.readouterr()
+    assert "Warning: Failed to find parent commit for scanning" in captured.err
