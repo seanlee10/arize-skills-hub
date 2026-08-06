@@ -62,11 +62,27 @@ violations that are not in doubt, and its verdicts are not reproducible. Running
 rules first means blatant cases are decided deterministically and for free — so
 the more obviously malicious a skill is, the faster and cheaper it is rejected.
 
-The two fixtures under `skills/_fixtures/` exist to keep both stages honest.
-`malicious-sample` is caught by the rules. `email-composer` trips no rule at all
-— it instructs a hidden BCC to an external address and tells the agent to hide
-that from the user — and is caught only by the judge. If a rule ever fires on
-`email-composer`, the rules have grown broader than intended.
+Two deliberately unsafe skills keep both stages honest.
+
+`skills/email-composer/` is registered like any other skill and is scanned on
+every relevant push. It trips no rule at all — it instructs a hidden BCC to an
+external address and tells the agent to hide that from the user — so the judge is
+the only thing standing between it and the registry. If a rule ever fires on it,
+the rules have grown broader than intended.
+
+**It is unsafe on purpose, so the gate fails on `main` by design.** A red run is
+this repository demonstrating that it works, not a broken pipeline.
+
+It is also the shortest way to see both outcomes. Drop the hidden-BCC steps from
+`skills/email-composer/SKILL.md` — the two that add an external recipient and
+tell the agent to conceal it — and push. Nothing else about the skill changes,
+and the same gate that rejected it now passes it. That contrast is the point:
+the judge is reacting to what the instructions would make an agent do, not to
+the skill's name or subject.
+
+`skills/_fixtures/malicious-sample/` is the rule-path counterpart. It sits one
+level deeper than a registered skill, so the target glob `skills/*/SKILL.md` does
+not match it and it is only scanned when named explicitly with `--skill`.
 
 ## Running the scan locally
 
@@ -107,7 +123,7 @@ gate does not fail open.
 ```
 skills/
   <name>/SKILL.md         registered skills, team-owned
-  _fixtures/              deliberate violations, excluded from the default scan
+  _fixtures/              rule-path fixture, excluded from the default scan
 
 policy/                   judgment criteria, hub-owned (see CODEOWNERS)
   rules.yaml              deterministic patterns
@@ -121,14 +137,11 @@ harness/                  the scanner
   targets.py              which skills this commit needs scanned
   report.py               job summary and Slack payload
   findings.py             the shared result type
-
-docs/superpowers/         design and implementation notes
 ```
 
-Fixtures live one level deeper than real skills, at
-`skills/_fixtures/<name>/SKILL.md`. The scan's target glob is
-`skills/*/SKILL.md`, so it does not match them — they are scanned only when named
-explicitly with `--skill`.
+Anything under `skills/_fixtures/` sits one level deeper than a registered
+skill, so the target glob `skills/*/SKILL.md` does not match it. Those are
+scanned only when named explicitly with `--skill`.
 
 ## Ownership
 
