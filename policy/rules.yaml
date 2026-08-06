@@ -1,0 +1,41 @@
+# Deterministic scan patterns. Hub-owner-owned, protected by CODEOWNERS.
+#
+# Rules are curated narrowly so false positives stay near zero. Anything that
+# needs a wide net belongs in policy/static-scan.md, judged by the model, not
+# here. Matching is always case-insensitive.
+
+rules:
+  - id: instruction-override
+    severity: critical
+    description: Classic injection phrasing that nullifies higher-level instructions
+    pattern: '\b(ignore|disregard|forget)\s+(all\s+)?(previous|prior|above|earlier)\s+(instruction|instructions|prompt|prompts|rule|rules)\b'
+
+  - id: instruction-override-persona
+    severity: critical
+    description: Attempt to escape a defined role by claiming the constraints no longer apply
+    pattern: '\byou\s+are\s+no\s+longer\s+(bound|restricted|limited)\b'
+
+  - id: exfiltration-http-client
+    severity: critical
+    description: Instruction to send processed data to an external endpoint
+    pattern: '\b(curl|wget|httpie)\b[^\n]{0,80}\bhttps?://'
+
+  - id: exfiltration-verb
+    severity: critical
+    description: Verb that directly instructs data exfiltration
+    pattern: '\b(exfiltrate|leak|smuggle)\b[^\n]{0,60}\b(data|content|conversation|transcript|file|files)\b'
+
+  - id: credential-access
+    severity: high
+    description: Direct reference to a credential or secret value
+    pattern: '(api[_\- ]?key|secret[_\- ]?key|access[_\- ]?token|bearer[_\- ]?token|private[_\- ]?key)\b'
+
+  - id: credential-file-access
+    severity: high
+    description: Instruction to read a path where credentials are stored
+    pattern: '(\.env\b|~/\.ssh|~/\.aws/credentials|id_rsa\b)'
+
+  - id: obfuscated-payload
+    severity: high
+    description: Attempt to decode and execute an obfuscated payload
+    pattern: '\bbase64\s+(-d|--decode)\b|\becho\b[^\n]{0,40}\|\s*(sh|bash)\b'

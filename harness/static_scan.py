@@ -1,0 +1,189 @@
+"""Skill static scan entry point.
+
+Usage:
+    python -m harness.static_scan [--all] [--skill PATH] [--dry-run]
+"""
+
+import argparse
+import os
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+from harness.arize_judge import (
+    ArizeConfig,
+    JudgeError,
+    Skill,
+    judge_skills,
+    load_arize_config,
+    require_api_key,
+)
+from harness.findings import Finding, has_failure
+from harness.report import build_slack_payload, post_slack, render_summary
+from harness.rules import load_rules, scan_text
+from harness.targets import select_targets
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+RULES_PATH = REPO_ROOT / "policy" / "rules.yaml"
+ARIZE_CONFIG_PATH = REPO_ROOT / "policy" / "arize.yaml"
+
+
+def build_run_id() -> str:
+    """Compose a run id that is unique per invocation.
+
+    run_id names the Arize experiment (skill-scan-{run_id}) and tags each
+    dataset row via scan_run_id, and Arize rejects a duplicate experiment
+    name. GITHUB_RUN_ID alone is not enough to guarantee uniqueness: it
+    stays constant across GitHub Actions "re-run" attempts of the same
+    workflow run, and it is entirely absent locally. Composing it from the
+    run id, the attempt number, and a timestamp keeps every invocation
+    distinct while staying readable in the Arize UI — the run id and
+    attempt number identify which CI run (and which retry of it) produced
+    the experiment, and the timestamp disambiguates CI re-invocations
+    within the same attempt and repeated local runs.
+    """
+    run = os.environ.get("GITHUB_RUN_ID") or "local"
+    attempt = os.environ.get("GITHUB_RUN_ATTEMPT") or "1"
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%f")
+    return f"{run}-{attempt}-{timestamp}"
+
+
+def _write_summary(scanned: list[str], findings: list[Finding]) -> None:
+    """Render the job summary, print it, and append it to the step summary file.
+
+    Called on every run, pass or fail, so a quiet Slack channel can be read
+    as "nothing was wrong" rather than "the workflow never reported".
+    """
+    summary = render_summary(scanned, findings)
+    print(summary)
+    summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary_path:
+        with open(summary_path, "a", encoding="utf-8") as handle:
+            handle.write(summary)
+
+
+def scan_skills(
+    paths: list[Path],
+    rules,
+    config: ArizeConfig,
+    run_id: str,
+    judge_fn=judge_skills,
+) -> tuple[list[str], list[Finding]]:
+    """Run the rules locally, then judge whatever survived them in one batch.
+
+    A skill that already matched a rule is not judged: its verdict is settled,
+    and the round trip would buy nothing.
+    """
+    scanned: list[str] = []
+    findings: list[Finding] = []
+    to_judge: list[Skill] = []
+
+    for path in paths:
+        skill = path.parent.name
+        scanned.append(skill)
+        if not path.is_file():
+            # No verdict is possible for a skill that isn't there. Treat it
+            # the same way judge_skills treats a skill with no returned
+            # verdict: a failure, not a silent pass.
+            findings.append(
+                Finding(
+                    skill=skill,
+                    source="judge",
+                    severity="critical",
+                    detail=f"SKILL.md not found at {path}",
+                )
+            )
+            continue
+        body = path.read_text(encoding="utf-8")
+        rule_findings = scan_text(body, rules, skill)
+        if rule_findings:
+            findings.extend(rule_findings)
+        else:
+            to_judge.append(Skill(name=skill, body=body))
+
+    try:
+        findings.extend(judge_fn(to_judge, config, run_id))
+    except JudgeError as exc:
+        # Being unable to judge is a failure, not a pass.
+        findings.extend(
+            Finding(
+                skill=skill.name,
+                source="judge",
+                severity="critical",
+                detail=f"could not be judged: {exc}",
+            )
+            for skill in to_judge
+        )
+
+    return scanned, findings
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Scan skills for unsafe instructions.")
+    parser.add_argument("--all", action="store_true", help="scan every skill, ignoring the diff")
+    parser.add_argument("--skill", help="scan one skill directory (for fixtures and local work)")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="judge only; skip the Slack notification and the failing exit code",
+    )
+    args = parser.parse_args(argv)
+
+    rules = load_rules(RULES_PATH)
+    config = load_arize_config(ARIZE_CONFIG_PATH)
+
+    if args.skill:
+        targets = [Path(args.skill) / "SKILL.md"]
+    else:
+        targets = select_targets(REPO_ROOT, force_all=args.all)
+
+    scanned: list[str] = []
+    findings: list[Finding] = []
+
+    if targets:
+        scanned = [path.parent.name for path in targets]
+        try:
+            require_api_key()
+        except JudgeError as exc:
+            # No judge means no verdict, which is a failure — but the
+            # summary still has to be written so the run is not silent
+            # about why.
+            print(f"error: {exc}", file=sys.stderr)
+            findings = [
+                Finding(
+                    skill=name,
+                    source="judge",
+                    severity="critical",
+                    detail=f"scan could not run: {exc}",
+                )
+                for name in scanned
+            ]
+            _write_summary(scanned, findings)
+            return 1
+        run_id = build_run_id()
+        scanned, findings = scan_skills(targets, rules, config, run_id)
+
+    _write_summary(scanned, findings)
+
+    failed = has_failure(findings)
+
+    if failed and not args.dry_run:
+        server = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
+        repo = os.environ.get("GITHUB_REPOSITORY", "")
+        run = os.environ.get("GITHUB_RUN_ID", "")
+        payload = build_slack_payload(
+            findings,
+            commit=os.environ.get("GITHUB_SHA", "unknown")[:7],
+            author=os.environ.get("GITHUB_ACTOR", "unknown"),
+            run_url=f"{server}/{repo}/actions/runs/{run}",
+        )
+        if not post_slack(os.environ.get("SLACK_WEBHOOK_URL"), payload):
+            print("warning: Slack notification was not delivered", file=sys.stderr)
+
+    if args.dry_run:
+        return 0
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
