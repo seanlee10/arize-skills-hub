@@ -72,28 +72,20 @@ def changed_paths(repo_root: Path) -> list[str] | None:
 
         # If HEAD is listed as a root commit, check if it's a genuine root or shallow clone
         if head_commit == root_commit_list:
-            # Use git rev-parse --git-dir to find the actual git directory
-            # (works even in worktrees/submodules where .git is a file)
-            gitdir = subprocess.run(
-                ["git", "rev-parse", "--git-dir"],
+            is_shallow = subprocess.run(
+                ["git", "rev-parse", "--is-shallow-repository"],
                 cwd=repo_root,
                 capture_output=True,
                 text=True,
             )
-            if gitdir.returncode == 0:
-                git_dir_path = Path(gitdir.stdout.strip())
-                # Handle relative paths
-                if not git_dir_path.is_absolute():
-                    git_dir_path = repo_root / git_dir_path
-                shallow_file = git_dir_path / "shallow"
-                if shallow_file.exists():
-                    # Shallow clone - emit warning
-                    error_msg = parent.stderr.strip() if parent.stderr else "(no error message)"
-                    print(
-                        f"Warning: Failed to find parent commit for scanning: {error_msg}",
-                        file=sys.stderr,
-                    )
-                    return None
+            if is_shallow.returncode == 0 and is_shallow.stdout.strip() == "true":
+                # Shallow clone - emit warning
+                error_msg = parent.stderr.strip() if parent.stderr else "(no error message)"
+                print(
+                    f"Warning: Failed to find parent commit for scanning: {error_msg}",
+                    file=sys.stderr,
+                )
+                return None
             # Genuine root commit - return silently
             return None
 
