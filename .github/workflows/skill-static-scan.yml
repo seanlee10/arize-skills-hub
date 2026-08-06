@@ -8,6 +8,15 @@ on:
       - 'policy/**'
       - 'harness/**'
       - '.github/workflows/skill-static-scan.yml'
+  # Manual trigger. Also the way to get a run when a push cannot be path-filtered
+  # — a branch creation or a force push gives GitHub no diff base, so the paths
+  # filter above skips those pushes entirely.
+  workflow_dispatch:
+    inputs:
+      scan_all:
+        description: 'Scan every registered skill instead of the last commit diff'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -32,4 +41,4 @@ jobs:
         env:
           ARIZE_API_KEY: ${{ secrets.ARIZE_API_KEY }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-        run: python -m harness.static_scan
+        run: python -m harness.static_scan ${{ inputs.scan_all && '--all' || '' }}
