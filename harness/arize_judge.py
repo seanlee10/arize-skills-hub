@@ -2,7 +2,9 @@
 
 The pipeline is: append the skills to the scan dataset, run an identity
 experiment over them, bind an evaluation task to that experiment, trigger it,
-wait for it, and read the verdicts back out of the experiment export.
+wait for it, and read the verdicts back out of the experiment export — joined
+to a skill through the dataset export, since the experiment export carries no
+input columns, only a top-level example_id.
 """
 
 import json
@@ -110,18 +112,21 @@ def judge_skills(
     PASS, and for each skill that came back with no row for this run at all
     — an unjudged skill is not a passing skill.
 
-    The dataset is shared and long-lived, so every appended example carries
-    this call's run_id (`scan_run_id`) and the export is filtered back down
-    to only that run's rows before verdicts are read — otherwise a stale row
-    left by an earlier run with the same skill name could be picked up
-    instead of (or ahead of) the current one.
+    The experiment export does not carry the dataset's input columns (no
+    skill_name, no scan_run_id) — only eval.* verdict fields, trace ids, and
+    a top-level example_id. So the join to a skill goes through the dataset:
+    the dataset is exported separately to build example_id -> skill_name for
+    this run's own examples (scan_run_id == run_id, which also keeps a stale
+    example appended by an earlier run on the shared, long-lived dataset
+    from leaking its verdict into this run), and each experiment-export row
+    is then matched to a skill via that map.
 
     The four mutating calls below (dataset append, experiment run, task
     creation, trigger) are deliberately *not* retried: if `ax` dies locally
     after the server already accepted the request, retrying would duplicate
     the resource. They fail closed on the first error instead — a JudgeError
-    propagates immediately and the caller treats that as FAIL. Only the two
-    read-only calls (wait-for-run, export) are retried.
+    propagates immediately and the caller treats that as FAIL. Only the
+    read-only calls (wait-for-run, and the two exports) are retried.
     """
     if not skills:
         return []
@@ -183,6 +188,23 @@ def judge_skills(
     if finished.get("num_errors"):
         raise JudgeError(f"evaluation run reported {finished['num_errors']} errors")
 
+    # The dataset carries the input columns (skill_name, skill_body,
+    # scan_run_id) under each example's additional_properties, keyed by the
+    # example's top-level id. Only examples from this run are kept, so a
+    # stale example from an earlier run on the shared dataset can never
+    # supply this run's verdict for a same-named skill.
+    dataset_export = _with_retries(runner, ["datasets", "export", config.dataset_id, "--stdout"])
+    example_to_skill: dict[str, str] = {}
+    for row in dataset_export.get("__list__", []):
+        props = row.get("additional_properties") or {}
+        if props.get("scan_run_id") != run_id:
+            continue
+        example_id = row.get("id")
+        name = props.get("skill_name")
+        if example_id is None or name is None:
+            continue
+        example_to_skill[example_id] = name
+
     exported = _with_retries(runner, ["experiments", "export", experiment_id, "--stdout"])
     runs = exported.get("__list__", [])
 
@@ -191,15 +213,15 @@ def judge_skills(
 
     verdicts: dict[str, tuple[str | None, str]] = {}
     for entry in runs:
-        props = entry.get("additional_properties") or entry
-        name = props.get("skill_name")
+        example_id = entry.get("example_id")
+        if example_id is None:
+            continue
+        name = example_to_skill.get(example_id)
         if name is None:
+            # No example in this run's own set produced this row: either it
+            # belongs to a different run or the id is otherwise unknown.
             continue
-        # Only this run's own rows are eligible: the dataset is shared and
-        # long-lived, so a stale row from an earlier run with the same skill
-        # name must never be read as this run's verdict.
-        if props.get("scan_run_id") != run_id:
-            continue
+        props = entry.get("additional_properties") or {}
         verdicts[name] = (props.get(label_key), props.get(explanation_key) or "")
 
     findings = []
