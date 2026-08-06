@@ -51,6 +51,18 @@ def load_arize_config(path: str | Path) -> ArizeConfig:
     )
 
 
+def _command_label(args: list[str]) -> str:
+    """Name the ax command without echoing its payload.
+
+    Argument values carry whole skill bodies. Putting the full command line into
+    an error message pushes those into the Slack notification and the job
+    summary, which is both unreadable and a needless place for skill text to
+    end up. The subcommand plus the CLI's own stderr is what a reader needs.
+    """
+    subcommand = " ".join(args[:2]) if args else ""
+    return f"ax {subcommand}".strip()
+
+
 def run_cli(args: list[str], timeout: int = 900) -> dict:
     """Run an `ax` command and parse the JSON it prints.
 
@@ -66,11 +78,12 @@ def run_cli(args: list[str], timeout: int = 900) -> dict:
             timeout=timeout,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
-        raise JudgeError(f"ax {' '.join(args)} could not run: {exc}") from exc
+        raise JudgeError(f"{_command_label(args)} could not run: {exc}") from exc
 
     if completed.returncode != 0:
         raise JudgeError(
-            f"ax {' '.join(args)} exited {completed.returncode}: {completed.stderr.strip()[:400]}"
+            f"{_command_label(args)} exited {completed.returncode}: "
+            f"{completed.stderr.strip()[:400]}"
         )
 
     out = completed.stdout

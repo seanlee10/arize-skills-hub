@@ -43,6 +43,16 @@ jobs:
           python -m pip install --upgrade arize==8.44.0
           python -c "import importlib.metadata as m; print('arize', m.version('arize'), 'ax', m.version('arize-ax-cli'))"
 
+      - name: Configure the ax profile
+        # The runner is a fresh container with no ~/.arize, and the ax CLI
+        # requires an active profile — ARIZE_API_KEY alone is not enough.
+        env:
+          ARIZE_API_KEY: ${{ secrets.ARIZE_API_KEY }}
+        run: |
+          ax profiles create ci --api-key "$ARIZE_API_KEY" --auth-method api-key
+          ax profiles use ci
+          ax spaces list --limit 1 > /dev/null && echo "ax profile is usable"
+
       - name: Run static scan
         env:
           ARIZE_API_KEY: ${{ secrets.ARIZE_API_KEY }}
