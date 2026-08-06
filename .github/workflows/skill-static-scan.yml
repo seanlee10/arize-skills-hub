@@ -49,9 +49,17 @@ jobs:
         env:
           ARIZE_API_KEY: ${{ secrets.ARIZE_API_KEY }}
         run: |
-          ax profiles create ci --api-key "$ARIZE_API_KEY" --auth-method api-key
+          # --output-format json is load-bearing: the harness parses ax's stdout,
+          # and the profile's output format decides what ax prints. A profile
+          # created without it defaults to table output and every parse fails
+          # with "printed no JSON".
+          ax profiles create ci \
+            --api-key "$ARIZE_API_KEY" \
+            --auth-method api-key \
+            --output-format json
           ax profiles use ci
-          ax spaces list --limit 1 > /dev/null && echo "ax profile is usable"
+          ax spaces list --limit 1 | head -c 1 | grep -q '{' \
+            && echo "ax profile is usable and prints JSON"
 
       - name: Run static scan
         env:
