@@ -50,11 +50,26 @@ def build_slack_payload(
     author: str,
     run_url: str,
 ) -> dict:
-    """Block Kit payload, sent only when the scan failed."""
-    skills = sorted({f.skill for f in findings})
+    """Block Kit payload, sent only when the scan failed.
+
+    Slack section text is capped at 3000 characters. This function limits
+    findings to 15 (conservatively under ~2000 chars) and appends an omitted
+    count if more exist, ensuring the payload never exceeds Slack's limit.
+    """
+    max_findings = 15
+    included = findings[:max_findings]
+    skills = sorted({f.skill for f in included})
     detail_lines = [
-        f"• `{f.skill}` — {f.source}/{f.severity}: {f.detail}" for f in findings
+        f"• `{f.skill}` — {f.source}/{f.severity}: {f.detail}" for f in included
     ]
+
+    if len(findings) > max_findings:
+        omitted = len(findings) - max_findings
+        detail_lines.append(
+            f"\n... and {omitted} more violation{'s' if omitted > 1 else ''}. "
+            f"See the job summary for the complete list."
+        )
+
     return {
         "text": f"Skill static scan failed: {', '.join(skills)}",
         "blocks": [
@@ -89,13 +104,13 @@ def post_slack(webhook_url: str | None, payload: dict) -> bool:
     """
     if not webhook_url:
         return False
-    request = Request(
-        webhook_url,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
     try:
+        request = Request(
+            webhook_url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
         with urlopen(request, timeout=10) as response:
             return 200 <= response.status < 300
     except (URLError, OSError, ValueError):
