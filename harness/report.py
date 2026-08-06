@@ -52,21 +52,44 @@ def build_slack_payload(
 ) -> dict:
     """Block Kit payload, sent only when the scan failed.
 
-    Slack section text is capped at 3000 characters. This function limits
-    findings to 15 (conservatively under ~2000 chars) and appends an omitted
-    count if more exist, ensuring the payload never exceeds Slack's limit.
+    Slack section text is capped at 3000 characters. This function bounds
+    the section text size by: truncating each detail to 180 chars with
+    ellipsis, then accumulating findings against a 2800-char budget (leaving
+    200 chars headroom for formatting and the omitted-count line). Worst case:
+    with 180-char details and ~45-char overhead per line, fits ~12 findings.
     """
-    max_findings = 15
-    included = findings[:max_findings]
-    skills = sorted({f.skill for f in included})
-    detail_lines = [
-        f"• `{f.skill}` — {f.source}/{f.severity}: {f.detail}" for f in included
-    ]
+    # Derive skills from all findings for the fallback text
+    skills = sorted({f.skill for f in findings})
 
-    if len(findings) > max_findings:
-        omitted = len(findings) - max_findings
+    # Truncate details and accumulate within budget
+    detail_truncation_limit = 180
+    section_text_budget = 2800
+    included_lines = []
+    section_text_length = 0
+
+    for finding in findings:
+        # Truncate detail with ellipsis if needed
+        detail = finding.detail
+        if len(detail) > detail_truncation_limit:
+            detail = detail[:detail_truncation_limit] + "…"
+
+        line = f"• `{finding.skill}` — {finding.source}/{finding.severity}: {detail}"
+
+        # Check if adding this line would exceed budget (account for newline separator)
+        line_with_separator = "\n" + line if included_lines else line
+        if section_text_length + len(line_with_separator) > section_text_budget:
+            continue
+
+        included_lines.append(line)
+        section_text_length += len(line_with_separator)
+
+    # Calculate omitted count
+    omitted_count = len(findings) - len(included_lines)
+
+    detail_lines = included_lines
+    if omitted_count > 0:
         detail_lines.append(
-            f"\n... and {omitted} more violation{'s' if omitted > 1 else ''}. "
+            f"\n... and {omitted_count} more violation{'s' if omitted_count > 1 else ''}. "
             f"See the job summary for the complete list."
         )
 
