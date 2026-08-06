@@ -1,0 +1,35 @@
+name: Skill static scan
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'skills/**'
+      - 'policy/**'
+      - 'harness/**'
+      - '.github/workflows/skill-static-scan.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  static-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Two commits so the parent is available for the diff.
+          fetch-depth: 2
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Run static scan
+        env:
+          ARIZE_API_KEY: ${{ secrets.ARIZE_API_KEY }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: python -m harness.static_scan
