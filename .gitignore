@@ -1,6 +1,6 @@
-# 사용자 전역 gitignore(~/.gitignore_global)가 `docs`를 무시하지만,
-# 이 저장소는 설계 문서를 추적해야 하므로 되돌린다.
-!docs/
+# Design and planning notes stay local — the user's global gitignore already
+# excludes docs/, and this repository deliberately does not track it.
+docs/
 
 __pycache__/
 *.pyc
