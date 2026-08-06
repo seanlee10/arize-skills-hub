@@ -5,7 +5,7 @@ import pytest
 from harness.arize_judge import ArizeConfig, JudgeError, Skill
 from harness.findings import Finding
 from harness.rules import load_rules
-from harness.static_scan import main, scan_skills
+from harness.static_scan import build_run_id, main, scan_skills
 
 RULES = load_rules(Path(__file__).parent.parent / "policy" / "rules.yaml")
 CONFIG = ArizeConfig(
@@ -89,6 +89,27 @@ def test_missing_skill_file_is_a_failing_finding_and_not_judged(tmp_path: Path):
     assert findings[0].skill == "ghost"
     assert findings[0].source == "judge"
     assert "not found" in findings[0].detail
+
+
+def test_build_run_id_is_unique_per_invocation_and_carries_ci_identifiers(monkeypatch):
+    monkeypatch.setenv("GITHUB_RUN_ID", "998877")
+    monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "2")
+
+    first = build_run_id()
+    second = build_run_id()
+
+    assert first != second
+    assert first.startswith("998877-2-")
+    assert second.startswith("998877-2-")
+
+
+def test_build_run_id_defaults_when_ci_env_vars_are_absent(monkeypatch):
+    monkeypatch.delenv("GITHUB_RUN_ID", raising=False)
+    monkeypatch.delenv("GITHUB_RUN_ATTEMPT", raising=False)
+
+    run_id = build_run_id()
+
+    assert run_id.startswith("local-1-")
 
 
 def test_main_missing_api_key_still_writes_the_summary_and_fails(

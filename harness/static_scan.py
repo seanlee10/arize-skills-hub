@@ -7,6 +7,7 @@ Usage:
 import argparse
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 from harness.arize_judge import (
@@ -25,6 +26,26 @@ from harness.targets import select_targets
 REPO_ROOT = Path(__file__).resolve().parent.parent
 RULES_PATH = REPO_ROOT / "policy" / "rules.yaml"
 ARIZE_CONFIG_PATH = REPO_ROOT / "policy" / "arize.yaml"
+
+
+def build_run_id() -> str:
+    """Compose a run id that is unique per invocation.
+
+    run_id names the Arize experiment (skill-scan-{run_id}) and tags each
+    dataset row via scan_run_id, and Arize rejects a duplicate experiment
+    name. GITHUB_RUN_ID alone is not enough to guarantee uniqueness: it
+    stays constant across GitHub Actions "re-run" attempts of the same
+    workflow run, and it is entirely absent locally. Composing it from the
+    run id, the attempt number, and a timestamp keeps every invocation
+    distinct while staying readable in the Arize UI — the run id and
+    attempt number identify which CI run (and which retry of it) produced
+    the experiment, and the timestamp disambiguates CI re-invocations
+    within the same attempt and repeated local runs.
+    """
+    run = os.environ.get("GITHUB_RUN_ID") or "local"
+    attempt = os.environ.get("GITHUB_RUN_ATTEMPT") or "1"
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%f")
+    return f"{run}-{attempt}-{timestamp}"
 
 
 def _write_summary(scanned: list[str], findings: list[Finding]) -> None:
@@ -139,7 +160,7 @@ def main(argv: list[str] | None = None) -> int:
             ]
             _write_summary(scanned, findings)
             return 1
-        run_id = os.environ.get("GITHUB_RUN_ID") or "local"
+        run_id = build_run_id()
         scanned, findings = scan_skills(targets, rules, config, run_id)
 
     _write_summary(scanned, findings)
