@@ -96,3 +96,48 @@ def test_deleted_skill_is_not_a_target(repo: Path):
     (repo / "skills" / "b" / "SKILL.md").unlink()
     _commit(repo, "remove b")
     assert select_targets(repo) == []
+
+
+def test_genuine_root_commit_emits_no_warning(repo: Path, capsys):
+    """A genuine first commit returns None silently with no warning."""
+    _write_skill(repo, "a")
+    _commit(repo, "first")
+    result = changed_paths(repo)
+    assert result is None
+    captured = capsys.readouterr()
+    assert captured.err == ""
+
+
+def test_shallow_clone_parent_failure_emits_warning(tmp_path: Path, capsys):
+    """A shallow clone where parent lookup fails returns None with a warning."""
+    # Create a normal repo with three commits
+    full_repo = tmp_path / "full"
+    full_repo.mkdir(parents=True, exist_ok=True)
+    _run(full_repo, "git", "init", "-b", "main")
+    _run(full_repo, "git", "config", "user.email", "t@example.com")
+    _run(full_repo, "git", "config", "user.name", "T")
+    _write_skill(full_repo, "a")
+    _commit(full_repo, "first")
+    _write_skill(full_repo, "b")
+    _commit(full_repo, "second")
+    _write_skill(full_repo, "c")
+    _commit(full_repo, "third")
+
+    # Create a shallow clone using file:// URL to actually trigger shallow cloning
+    shallow = tmp_path / "shallow"
+    _run(
+        tmp_path,
+        "git",
+        "clone",
+        "--depth",
+        "1",
+        f"file://{full_repo}",
+        str(shallow),
+    )
+
+    # On the shallow clone, HEAD has no parent accessible in the shallow history
+    # changed_paths should emit a warning but still return None
+    result = changed_paths(shallow)
+    assert result is None
+    captured = capsys.readouterr()
+    assert "Warning: Failed to find parent commit for scanning" in captured.err

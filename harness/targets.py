@@ -1,6 +1,7 @@
 """Decide which skills a commit needs scanned."""
 
 import subprocess
+import sys
 from pathlib import Path
 
 SKILL_GLOB = "skills/*/SKILL.md"
@@ -17,7 +18,12 @@ def all_skills(repo_root: Path) -> list[Path]:
 
 
 def changed_paths(repo_root: Path) -> list[str] | None:
-    """Paths changed by the last commit, or None when it has no parent."""
+    """Paths changed by the last commit, or None when it has no parent.
+
+    If the parent lookup fails, distinguishes between a genuine root commit
+    (returns None silently) and other git failures like shallow clones
+    (returns None but emits a warning to stderr).
+    """
     parent = subprocess.run(
         ["git", "rev-parse", "--verify", "HEAD^"],
         cwd=repo_root,
@@ -25,6 +31,19 @@ def changed_paths(repo_root: Path) -> list[str] | None:
         text=True,
     )
     if parent.returncode != 0:
+        # Parent lookup failed. Check if this is a genuine root commit vs a git failure.
+        # A genuine root commit has no shallow boundary, while shallow clones do.
+        shallow_file = repo_root / ".git" / "shallow"
+        if not shallow_file.exists():
+            # No shallow boundary, so this is a genuine root commit
+            return None
+
+        # Shallow clone or other git failure - emit warning
+        error_msg = parent.stderr.strip() if parent.stderr else "(no error message)"
+        print(
+            f"Warning: Failed to find parent commit for scanning: {error_msg}",
+            file=sys.stderr,
+        )
         return None
 
     diff = subprocess.run(
