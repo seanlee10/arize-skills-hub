@@ -5,7 +5,7 @@ import pytest
 from harness.arize_judge import ArizeConfig, JudgeError, Skill
 from harness.findings import Finding
 from harness.rules import load_rules
-from harness.static_scan import scan_skills
+from harness.static_scan import main, scan_skills
 
 RULES = load_rules(Path(__file__).parent.parent / "policy" / "rules.yaml")
 CONFIG = ArizeConfig(
@@ -75,7 +75,7 @@ def test_judge_error_becomes_a_failing_finding_for_every_judged_skill(tmp_path: 
     assert all("arize unreachable" in f.detail for f in findings)
 
 
-def test_missing_skill_file_is_recorded_but_not_judged(tmp_path: Path):
+def test_missing_skill_file_is_a_failing_finding_and_not_judged(tmp_path: Path):
     missing = tmp_path / "ghost" / "SKILL.md"
     missing.parent.mkdir(parents=True, exist_ok=True)
 
@@ -85,4 +85,23 @@ def test_missing_skill_file_is_recorded_but_not_judged(tmp_path: Path):
 
     scanned, findings = scan_skills([missing], RULES, CONFIG, "r1", judge_fn=judge)
     assert scanned == ["ghost"]
-    assert findings == []
+    assert len(findings) == 1
+    assert findings[0].skill == "ghost"
+    assert findings[0].source == "judge"
+    assert "not found" in findings[0].detail
+
+
+def test_main_missing_api_key_still_writes_the_summary_and_fails(
+    tmp_path: Path, monkeypatch, capsys
+):
+    monkeypatch.delenv("ARIZE_API_KEY", raising=False)
+    summary_path = tmp_path / "step_summary.md"
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary_path))
+
+    exit_code = main(["--skill", str(tmp_path / "some-skill")])
+
+    assert exit_code == 1
+    captured = capsys.readouterr()
+    assert "ARIZE_API_KEY" in captured.out
+    assert summary_path.exists()
+    assert "ARIZE_API_KEY" in summary_path.read_text(encoding="utf-8")

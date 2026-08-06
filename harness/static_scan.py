@@ -27,6 +27,20 @@ RULES_PATH = REPO_ROOT / "policy" / "rules.yaml"
 ARIZE_CONFIG_PATH = REPO_ROOT / "policy" / "arize.yaml"
 
 
+def _write_summary(scanned: list[str], findings: list[Finding]) -> None:
+    """Render the job summary, print it, and append it to the step summary file.
+
+    Called on every run, pass or fail, so a quiet Slack channel can be read
+    as "nothing was wrong" rather than "the workflow never reported".
+    """
+    summary = render_summary(scanned, findings)
+    print(summary)
+    summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary_path:
+        with open(summary_path, "a", encoding="utf-8") as handle:
+            handle.write(summary)
+
+
 def scan_skills(
     paths: list[Path],
     rules,
@@ -47,6 +61,17 @@ def scan_skills(
         skill = path.parent.name
         scanned.append(skill)
         if not path.is_file():
+            # No verdict is possible for a skill that isn't there. Treat it
+            # the same way judge_skills treats a skill with no returned
+            # verdict: a failure, not a silent pass.
+            findings.append(
+                Finding(
+                    skill=skill,
+                    source="judge",
+                    severity="critical",
+                    detail=f"SKILL.md not found at {path}",
+                )
+            )
             continue
         body = path.read_text(encoding="utf-8")
         rule_findings = scan_text(body, rules, skill)
@@ -95,21 +120,29 @@ def main(argv: list[str] | None = None) -> int:
     findings: list[Finding] = []
 
     if targets:
+        scanned = [path.parent.name for path in targets]
         try:
             require_api_key()
         except JudgeError as exc:
+            # No judge means no verdict, which is a failure — but the
+            # summary still has to be written so the run is not silent
+            # about why.
             print(f"error: {exc}", file=sys.stderr)
+            findings = [
+                Finding(
+                    skill=name,
+                    source="judge",
+                    severity="critical",
+                    detail=f"scan could not run: {exc}",
+                )
+                for name in scanned
+            ]
+            _write_summary(scanned, findings)
             return 1
         run_id = os.environ.get("GITHUB_RUN_ID") or "local"
         scanned, findings = scan_skills(targets, rules, config, run_id)
 
-    summary = render_summary(scanned, findings)
-    print(summary)
-
-    summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
-    if summary_path:
-        with open(summary_path, "a", encoding="utf-8") as handle:
-            handle.write(summary)
+    _write_summary(scanned, findings)
 
     failed = has_failure(findings)
 
