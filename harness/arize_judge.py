@@ -9,6 +9,7 @@ input columns, only a top-level example_id.
 
 import json
 import os
+import re
 import subprocess
 import time
 from dataclasses import dataclass
@@ -18,6 +19,10 @@ from typing import NamedTuple
 import yaml
 
 from harness.findings import Finding
+
+# Colour codes contain "[", which the JSON search below would otherwise
+# mistake for the start of a JSON array.
+ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 
 MAX_ATTEMPTS = 3
 WAIT_TIMEOUT_SECONDS = 600
@@ -69,6 +74,12 @@ def run_cli(args: list[str], timeout: int = 900) -> dict:
     `ax` writes progress lines and an upgrade banner to the same stream, so the
     JSON body is located rather than assumed to start at byte zero. A list
     response is wrapped under "__list__" so the return type stays a dict.
+
+    Colour codes are stripped before that search. "\\x1b[91m" contains a "[",
+    so a coloured line ahead of the JSON reads as the start of a JSON array:
+    `ax` exits 0 and prints a red traceback when task rows raise, and the
+    resulting "unparsable JSON" replaced the traceback that said what actually
+    went wrong.
     """
     try:
         completed = subprocess.run(
@@ -86,17 +97,21 @@ def run_cli(args: list[str], timeout: int = 900) -> dict:
             f"{completed.stderr.strip()[:400]}"
         )
 
-    out = completed.stdout
+    out = ANSI_RE.sub("", completed.stdout)
     start_obj = out.find("{")
     start_arr = out.find("[")
     candidates = [i for i in (start_obj, start_arr) if i >= 0]
     if not candidates:
-        raise JudgeError(f"ax {' '.join(args)} printed no JSON")
+        # The tail, not the command: when ax prints a traceback instead of a
+        # result, that traceback is the only thing that says why.
+        raise JudgeError(
+            f"{_command_label(args)} printed no JSON. Last output:\n{out.strip()[-600:]}"
+        )
     start = min(candidates)
     try:
         parsed = json.loads(out[start:])
     except json.JSONDecodeError as exc:
-        raise JudgeError(f"ax {' '.join(args)} printed unparsable JSON: {exc}") from exc
+        raise JudgeError(f"{_command_label(args)} printed unparsable JSON: {exc}") from exc
 
     return {"__list__": parsed} if isinstance(parsed, list) else parsed
 
@@ -110,7 +125,7 @@ def _with_retries(runner, args, timeout=900):
             return runner(args, timeout=timeout)
         except JudgeError as exc:
             last = exc
-    raise JudgeError(f"ax {' '.join(args)} failed after {MAX_ATTEMPTS} attempts: {last}")
+    raise JudgeError(f"{_command_label(args)} failed after {MAX_ATTEMPTS} attempts: {last}")
 
 
 def judge_skills(
