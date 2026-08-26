@@ -1,11 +1,13 @@
-# arize-ax-cli 0.28.1 pins arize==8.43.1, but 8.43.1 cannot deserialize the
-# experiments this scan creates — its Experiment model rejects the space_id the
-# server now returns, which breaks `ax experiments run` and `ax experiments
-# list`. The working combination is the CLI at 0.28.1 with arize upgraded to
-# 8.44.0 on top, which pip permits as an upgrade but cannot reach by resolving
-# both pins at once. The workflow therefore installs this file first and then
-# upgrades arize; see .github/workflows/skill-static-scan.yml.
-arize-ax-cli==0.28.1
+# arize-ax-cli 0.32.0 pins arize==8.49.0 and pip resolves the pair in one step.
+#
+# Two earlier pins broke without this repo changing a line: the server began
+# returning a field the pinned SDK's generated model did not know, and the model
+# rejected the whole response. 8.43.1's Experiment refused the server's space_id;
+# 8.44.0's TaskEvaluator refused its evaluator_version_id, which failed the scan
+# *after* the evaluation task had already been created server-side. 8.49.0 knows
+# both fields. tests/test_arize_sdk_contract.py asserts that and explains the
+# failure shape, so the next drift is recognisable rather than mysterious.
+arize-ax-cli==0.32.0
 pyyaml>=6.0
 pytest>=8.0
 

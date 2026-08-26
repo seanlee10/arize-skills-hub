@@ -28,11 +28,9 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        # Same two-step install as the scan: arize-ax-cli pins arize==8.43.1,
-        # which cannot deserialize the experiments these runs create.
         run: |
           python -m pip install -r requirements.txt
-          python -m pip install --upgrade arize==8.44.0
+          python -c "import importlib.metadata as m; print('arize', m.version('arize'), 'ax', m.version('arize-ax-cli'))"
 
       - name: Configure the ax profile
         # The runner has no ~/.arize and the ax CLI needs an active profile;

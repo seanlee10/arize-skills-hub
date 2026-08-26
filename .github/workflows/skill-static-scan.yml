@@ -35,13 +35,17 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        # Two steps on purpose: arize-ax-cli pins arize==8.43.1, which cannot
-        # deserialize the experiments this scan creates. Resolving both pins at
-        # once is impossible, but pip accepts the upgrade applied afterwards.
+        # One step now: arize-ax-cli 0.32.0 pins an arize that can deserialize
+        # what this server returns, so the pair resolves without an upgrade
+        # applied on top. The version line stays — it is what identified the
+        # last two server-drift breakages.
         run: |
           python -m pip install -r requirements.txt
-          python -m pip install --upgrade arize==8.44.0
           python -c "import importlib.metadata as m; print('arize', m.version('arize'), 'ax', m.version('arize-ax-cli'))"
+
+      - name: Check the SDK still matches the server
+        # Fails with a named field rather than an opaque parse error mid-scan.
+        run: python -m pytest tests/test_arize_sdk_contract.py -q
 
       - name: Configure the ax profile
         # The runner is a fresh container with no ~/.arize, and the ax CLI
