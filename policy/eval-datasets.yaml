@@ -1,0 +1,29 @@
+# Which dataset evaluates which skill. Hub-owner-owned.
+#
+# A skill listed here is eligible for the improvement loop; a skill absent from
+# this file is skipped, not failed — most skills have no evaluation set and that
+# is not a defect. An entry that is present but malformed raises instead, so a
+# typo cannot quietly disable the loop and look like "nothing to improve".
+#
+# Datasets are referenced by id, never by name: an Arize dataset carries no
+# metadata beyond its name, so a rename would silently break a name-based lookup.
+#
+# Passing the static scan is a precondition for the loop. A skill that failed the
+# scan must never be optimised against a dataset — the loop would tune it toward
+# a better score at whatever it is already doing wrong.
+
+skills:
+  # samsum_small: SAMSum messenger-dialogue summarisation.
+  dialog-summary:
+    dataset: RGF0YXNldDozNTI1OTM6bzlrYQ==
+    # Held back from the prompt: it is the expected summary. Rendering it would
+    # put the answer in the input and the experiment would measure nothing.
+    reference: summary
+
+  # to-questionnaire-eval: 8 scenarios built for this skill. See
+  # eval-datasets/to-questionnaire.json for what each one probes.
+  to-questionnaire:
+    dataset: RGF0YXNldDozNjIwNTA6ZElCVg==
+    # No reference: scored against the output template the skill itself declares.
+
+  # email-composer is deliberately absent: it fails the static scan.

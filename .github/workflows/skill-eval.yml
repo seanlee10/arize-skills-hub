@@ -1,0 +1,68 @@
+name: Skill evaluation
+
+# Manual only, and deliberately separate from the static scan. The scan is a
+# gate: it runs on every push and its failure means "do not ship this". This
+# runs a skill against a dataset to see how well it performs, which costs model
+# calls and whose result is a score, not a verdict. Sharing a workflow would
+# blur the scan's failure into "something scored badly".
+on:
+  workflow_dispatch:
+    inputs:
+      skill:
+        description: 'Skill to evaluate. Leave blank to run every skill that has a dataset.'
+        type: string
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        # Same two-step install as the scan: arize-ax-cli pins arize==8.43.1,
+        # which cannot deserialize the experiments these runs create.
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pip install --upgrade arize==8.44.0
+
+      - name: Configure the ax profile
+        # The runner has no ~/.arize and the ax CLI needs an active profile;
+        # ARIZE_API_KEY alone is not enough. --output-format json is
+        # load-bearing — the harness parses ax's stdout.
+        env:
+          ARIZE_API_KEY: ${{ secrets.ARIZE_API_KEY }}
+        run: |
+          ax profiles create ci \
+            --api-key "$ARIZE_API_KEY" \
+            --auth-method api-key \
+            --output-format json
+          ax profiles use ci
+
+      - name: Run evaluation
+        env:
+          ARIZE_API_KEY: ${{ secrets.ARIZE_API_KEY }}
+          # The scan never needed this: it judges skill text, and Arize's own
+          # evaluator makes that model call server-side. This workflow runs the
+          # skill, so the call happens here.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Passed as an environment variable, never interpolated into the
+          # script body. `skill` is free text from whoever dispatches the
+          # workflow, and `${{ inputs.skill }}` inside `run:` would let them
+          # append arbitrary shell. (The scan's `scan_all` input is safe to
+          # interpolate only because it is a boolean.)
+          SKILL: ${{ inputs.skill }}
+        run: |
+          if [ -n "$SKILL" ]; then
+            python -m harness.run_eval --skill "$SKILL"
+          else
+            python -m harness.run_eval
+          fi

@@ -1,0 +1,50 @@
+[
+  {
+    "situation": "We need to decide whether to replace our legacy payment system, but nobody on the product side knows its real failure history or what it costs to keep running.",
+    "recipient": "The infrastructure lead who has operated this system for five years.",
+    "needed_back": "Incident frequency over the last two years, annual maintenance effort in person-days, and the biggest risks of a cutover.",
+    "stress": "single theme, three concrete asks - should NOT be over-grouped into headings"
+  },
+  {
+    "situation": "We are scoping a mobile app rewrite and need to understand the current app across engineering, design, and support before committing to a plan.",
+    "recipient": "The engineering manager who owns the existing app and also sits in on design and support reviews.",
+    "needed_back": "Current architecture constraints, which design patterns are load-bearing, the top support complaints, and which of these would block a rewrite.",
+    "stress": "many asks spanning distinct themes - requires ## theme grouping"
+  },
+  {
+    "situation": "Our largest customer's contract renews in six weeks and we do not know which parts of the product they actually depend on.",
+    "recipient": "The account manager who runs the relationship but is not technical.",
+    "needed_back": "Which features they use daily, what they have complained about, and any commitments we have made that are not in the contract.",
+    "stress": "non-technical recipient - Context paragraph must carry more background, no jargon"
+  },
+  {
+    "situation": "We are choosing between two vector databases and the tradeoffs depend on how our retrieval workload actually behaves in production.",
+    "recipient": "The staff engineer who built our retrieval pipeline and has benchmarked both databases already.",
+    "needed_back": "Observed query latency distribution, index rebuild cost, and which database they would pick and why.",
+    "stress": "expert recipient - over-explaining context is the failure mode"
+  },
+  {
+    "situation": "A regulator has asked how we handle deletion requests and we cannot answer without knowing what our data pipeline actually retains and for how long.",
+    "recipient": "The data platform engineer who owns the warehouse and the ingestion jobs.",
+    "needed_back": "What personal data each pipeline stage retains, retention windows, whether deletion propagates downstream, and what would break if we shortened retention.",
+    "stress": "invites compound questions - retention AND propagation must stay separate"
+  },
+  {
+    "situation": "We are deciding whether to hire a dedicated SRE or spread on-call across the existing team, and the answer hinges on how bad on-call currently is.",
+    "recipient": "The engineer who has carried the most on-call shifts this year.",
+    "needed_back": "Above all, whether the current rotation is sustainable. Then page volume, how many pages were actionable, and what they would change first.",
+    "stress": "explicit priority ordering - most-important-first is checkable"
+  },
+  {
+    "situation": "Our onboarding flow drops 40% of signups and we do not know whether it is a UX problem, a verification problem, or an email deliverability problem.",
+    "recipient": "The growth analyst who has the funnel instrumentation but has not been asked to look at this specific drop.",
+    "needed_back": "Where exactly in the funnel users leave, whether the drop correlates with email provider or device, and what instrumentation is missing to tell these apart.",
+    "stress": "answer requires the recipient to do work - How to answer must set effort and deadline"
+  },
+  {
+    "situation": "Leadership wants us to adopt an internal AI coding assistant but we have no idea what would actually block adoption on the security side.",
+    "recipient": "The security engineer who reviews all new third-party tooling.",
+    "needed_back": "The review process and its timeline, the hard blockers versus negotiable concerns, and anything they have already rejected for similar reasons.",
+    "stress": "unknown unknowns - the Anything else catch-all should earn its place"
+  }
+]

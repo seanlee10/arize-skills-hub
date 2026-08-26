@@ -8,3 +8,7 @@
 arize-ax-cli==0.28.1
 pyyaml>=6.0
 pytest>=8.0
+
+# The improvement loop's task runs the skill under test, so the task process
+# calls the Anthropic API directly; the static scan does not and never has.
+anthropic>=0.93.0
