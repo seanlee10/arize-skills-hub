@@ -60,3 +60,29 @@ class TestRepoConfig:
         # It fails the static scan. Optimising it against a dataset would tune
         # it toward doing what it already does wrong, but better.
         assert "email-composer" not in load_eval_targets(REPO_CONFIG)
+
+
+class TestEvaluatorWiring:
+    def test_reads_the_evaluator_and_its_column(self, tmp_path):
+        path = write(
+            tmp_path,
+            "skills:\n  s:\n    dataset: DS\n    evaluator: EV\n    eval_column: quality\n",
+        )
+        target = load_eval_targets(path)["s"]
+        assert (target.evaluator, target.eval_column) == ("EV", "quality")
+
+    def test_a_dataset_without_an_evaluator_is_allowed(self, tmp_path):
+        # Producing outputs is useful before anyone has written a rubric.
+        target = load_eval_targets(write(tmp_path, "skills:\n  s:\n    dataset: DS\n"))["s"]
+        assert target.evaluator is None
+
+    def test_rejects_an_evaluator_with_no_column(self, tmp_path):
+        # Verdicts come back as eval.<column>.label; without the column name
+        # the scores would be fetched and then silently unreadable.
+        path = write(tmp_path, "skills:\n  s:\n    dataset: DS\n    evaluator: EV\n")
+        with pytest.raises(EvalDatasetError, match="eval_column"):
+            load_eval_targets(path)
+
+    def test_the_checked_in_to_questionnaire_entry_is_wired(self):
+        target = load_eval_targets(REPO_CONFIG)["to-questionnaire"]
+        assert target.evaluator and target.eval_column == "questionnaire_quality"

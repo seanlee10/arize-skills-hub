@@ -25,5 +25,10 @@ skills:
   to-questionnaire:
     dataset: RGF0YXNldDozNjIwNTA6ZElCVg==
     # No reference: scored against the output template the skill itself declares.
+    # to-questionnaire-quality, template column `questionnaire_quality`.
+    # See policy/questionnaire-eval.md — that file is the source of truth for the
+    # prompt, and a criteria change means cutting a new evaluator version.
+    evaluator: RXZhbHVhdG9yOjEzNzQxOlkxTEo=
+    eval_column: questionnaire_quality
 
   # email-composer is deliberately absent: it fails the static scan.

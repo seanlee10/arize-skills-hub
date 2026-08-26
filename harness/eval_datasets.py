@@ -24,6 +24,12 @@ class EvalTarget:
     # The column holding the expected answer, if the dataset has one. It is
     # withheld from the prompt and left for the evaluator to compare against.
     reference: str | None
+    # The evaluator that scores this skill's output, and the template column its
+    # verdict arrives under (eval.<eval_column>.label / .score / .explanation).
+    # Both absent means outputs are produced but not scored, which is the normal
+    # state before anyone has written a rubric.
+    evaluator: str | None = None
+    eval_column: str | None = None
 
 
 def load_eval_targets(path: str | Path) -> dict[str, EvalTarget]:
@@ -39,9 +45,19 @@ def load_eval_targets(path: str | Path) -> dict[str, EvalTarget]:
         dataset_id = entry.get("dataset")
         if not dataset_id:
             raise EvalDatasetError(f"{skill}: no `dataset` id")
+        evaluator = entry.get("evaluator") or None
+        eval_column = entry.get("eval_column") or None
+        if evaluator and not eval_column:
+            # Verdicts arrive as eval.<eval_column>.label. Without the column
+            # name the scores would be fetched and then silently unreadable,
+            # which looks like an evaluator that returned nothing.
+            raise EvalDatasetError(f"{skill}: has an `evaluator` but no `eval_column`")
+
         targets[skill] = EvalTarget(
             skill=skill,
             dataset_id=dataset_id,
             reference=entry.get("reference") or None,
+            evaluator=evaluator,
+            eval_column=eval_column,
         )
     return targets
