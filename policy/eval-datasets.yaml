@@ -30,6 +30,9 @@ skills:
     # prompt, and a criteria change means cutting a new evaluator version.
     evaluator: RXZhbHVhdG9yOjEzNzQxOlkxTEo=
     eval_column: questionnaire_quality
+    # The rubric's best grade. Rows below it carry the evidence the improvement
+    # loop reads; an "every criterion met" explanation names no defect to fix.
+    top_grade: excellent
     # The rubric's variables. `output` is the experiment's own output; the rest
     # are dataset columns. Stated rather than derived, so the evaluator is never
     # handed an input its prompt did not ask for.

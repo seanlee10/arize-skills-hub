@@ -120,3 +120,10 @@ class TestReadScores:
     def test_keeps_the_explanations(self):
         rows = [verdict("weak", 0.33, "compound question in Q2")]
         assert "compound question in Q2" in read_scores(rows, "questionnaire_quality").explanations[0]
+
+    def test_pairs_each_label_with_its_explanation(self):
+        rows = [verdict("solid", 0.67, "compound"), verdict("excellent", 1.0, "clean")]
+        assert read_scores(rows, "questionnaire_quality").rows == [
+            ("solid", "compound"),
+            ("excellent", "clean"),
+        ]

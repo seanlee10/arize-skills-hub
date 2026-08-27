@@ -23,6 +23,12 @@ from pathlib import Path
 
 from harness.arize_judge import _with_retries, load_arize_config, run_cli
 from harness.eval_datasets import EvalTarget, load_eval_targets
+from harness.propose import (
+    ProposalError,
+    build_client,
+    propose_improvement,
+    select_evidence,
+)
 from harness.static_scan import build_run_id
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -53,6 +59,9 @@ class ScoreResult:
     scored: int
     unscored: int
     explanations: list[str]
+    # (label, explanation) per scored row, so the improvement loop can take
+    # evidence only from the rows that fell short.
+    rows: list[tuple[str, str]]
 
 
 def read_scores(rows: list[dict], eval_column: str) -> ScoreResult:
@@ -68,6 +77,7 @@ def read_scores(rows: list[dict], eval_column: str) -> ScoreResult:
     labels: dict[str, int] = {}
     scores: list[float] = []
     explanations: list[str] = []
+    paired: list[tuple[str, str]] = []
     unscored = 0
 
     for row in rows:
@@ -80,8 +90,10 @@ def read_scores(rows: list[dict], eval_column: str) -> ScoreResult:
         value = props.get(score_key)
         if isinstance(value, (int, float)):
             scores.append(float(value))
-        if props.get(explanation_key):
-            explanations.append(props[explanation_key])
+        explanation = props.get(explanation_key) or ""
+        if explanation:
+            explanations.append(explanation)
+        paired.append((label, explanation))
 
     return ScoreResult(
         labels=labels,
@@ -89,6 +101,7 @@ def read_scores(rows: list[dict], eval_column: str) -> ScoreResult:
         scored=sum(labels.values()),
         unscored=unscored,
         explanations=explanations,
+        rows=paired,
     )
 
 
@@ -237,6 +250,11 @@ def _write_summary(lines: list[str]) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run a skill against its evaluation dataset.")
     parser.add_argument("--skill", help="one skill to evaluate; omit to run every eligible skill")
+    parser.add_argument(
+        "--propose",
+        action="store_true",
+        help="rewrite each scored SKILL.md from the evidence of the rows that fell short",
+    )
     args = parser.parse_args(argv)
 
     targets = load_eval_targets(EVAL_CONFIG_PATH)
@@ -264,8 +282,48 @@ def main(argv: list[str] | None = None) -> int:
         _write_summary(["## Skill evaluation", "", f"**Failed** — {exc}"])
         return 1
 
-    _write_summary(render_summary(runs))
+    lines = render_summary(runs)
+    if args.propose:
+        lines += propose_edits(runs, selected, REPO_ROOT)
+    _write_summary(lines)
     return 0
+
+
+def propose_edits(runs: list[EvalRun], targets: list[EvalTarget], repo_root: Path) -> list[str]:
+    """Rewrite each scored skill in place from its own shortfalls.
+
+    Writes to the working tree and nothing else. Branching, scanning the result
+    and opening the pull request are the workflow's job, so a proposal is never
+    something this module can land on its own.
+    """
+    by_skill = {t.skill: t for t in targets}
+    lines = ["", "### Proposed edits", ""]
+    client = build_client()
+
+    for run in runs:
+        target = by_skill.get(run.skill)
+        if run.score is None or target is None:
+            continue
+        evidence = select_evidence(run.score.rows, top=target.top_grade)
+        if not evidence:
+            lines.append(f"- `{run.skill}`: every row reached {target.top_grade}, nothing to propose")
+            continue
+
+        path = Path(repo_root) / "skills" / run.skill / "SKILL.md"
+        current = path.read_text(encoding="utf-8")
+        try:
+            proposed = propose_improvement(current, evidence, client)
+        except ProposalError as exc:
+            # A failed proposal is not a failed evaluation: the scores stand.
+            lines.append(f"- `{run.skill}`: no edit proposed — {exc}")
+            continue
+
+        path.write_text(proposed if proposed.endswith("\n") else proposed + "\n", encoding="utf-8")
+        lines.append(
+            f"- `{run.skill}`: rewritten from {len(evidence)} shortfall(s) "
+            f"({len(current)} → {len(proposed)} chars)"
+        )
+    return lines
 
 
 def render_summary(runs: list[EvalRun]) -> list[str]:

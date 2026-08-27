@@ -13,9 +13,18 @@ on:
         type: string
         required: false
         default: ''
+      propose:
+        description: 'Rewrite each scored skill from its shortfalls and open a pull request'
+        type: boolean
+        required: false
+        default: false
 
+# Write access is scoped to this workflow, which is manual-dispatch only, and it
+# is used for exactly one thing: pushing a branch and opening a pull request that
+# a person reads. Nothing here writes to main.
 permissions:
-  contents: read
+  contents: write
+  pull-requests: write
 
 jobs:
   evaluate:
@@ -58,9 +67,69 @@ jobs:
           # append arbitrary shell. (The scan's `scan_all` input is safe to
           # interpolate only because it is a boolean.)
           SKILL: ${{ inputs.skill }}
+          PROPOSE: ${{ inputs.propose }}
         run: |
+          ARGS=""
+          [ "$PROPOSE" = "true" ] && ARGS="--propose"
           if [ -n "$SKILL" ]; then
-            python -m harness.run_eval --skill "$SKILL"
+            python -m harness.run_eval --skill "$SKILL" $ARGS
           else
-            python -m harness.run_eval
+            python -m harness.run_eval $ARGS
           fi
+
+      - name: Scan the proposed skills
+        if: inputs.propose
+        # A proposal is a model-authored edit to a skill in a registry whose
+        # whole point is that skills get scanned. Asking a reviewer to read it
+        # before it has passed the same gate would invert this repo's premise.
+        # SLACK_WEBHOOK_URL is deliberately unset: a proposal that fails the gate
+        # is caught here and never becomes a pull request, so it is not the kind
+        # of failure the channel exists to announce.
+        env:
+          ARIZE_API_KEY: ${{ secrets.ARIZE_API_KEY }}
+        run: |
+          CHANGED=$(git diff --name-only -- 'skills/*/SKILL.md')
+          if [ -z "$CHANGED" ]; then
+            echo "No skill was rewritten — nothing to scan."
+            exit 0
+          fi
+          for f in $CHANGED; do
+            python -m harness.static_scan --skill "$(dirname "$f")"
+          done
+
+      - name: Open a pull request
+        if: inputs.propose
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if git diff --quiet -- 'skills/*/SKILL.md'; then
+            echo "No skill was rewritten — no pull request to open."
+            exit 0
+          fi
+          # The branch name is built from the run id alone. `skill` is free text
+          # from whoever dispatched the workflow, and it does not belong in a
+          # shell-expanded git ref.
+          BRANCH="improve/eval-${{ github.run_id }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add -- 'skills/*/SKILL.md'
+          git commit -m "Rewrite scanned skills from their evaluation shortfalls"
+          git push -u origin "$BRANCH"
+          {
+            echo "Proposed by the evaluation loop, from the graded rows that fell short."
+            echo
+            echo "The evaluation and the grades are in the run that produced this:"
+            echo "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo
+            echo "These edits have passed the static scan. They have **not** been"
+            echo "re-evaluated — run the evaluation on this branch to see whether the"
+            echo "score actually moved, and read the diff on its own merits either way."
+            echo
+            echo '```'
+            git diff --stat main -- 'skills/*/SKILL.md'
+            echo '```'
+          } > /tmp/pr-body.md
+          gh pr create --base main --head "$BRANCH" \
+            --title "Rewrite skills from their evaluation shortfalls" \
+            --body-file /tmp/pr-body.md

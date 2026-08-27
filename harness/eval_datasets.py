@@ -35,6 +35,10 @@ class EvalTarget:
     # everything the dataset happens to carry would feed the evaluator inputs
     # its prompt never asked for. "output" is the experiment's own output.
     column_mappings: dict[str, str] | None = None
+    # The rubric's best grade. Rows below it are what the improvement loop reads
+    # as evidence; without it every explanation, including "every criterion met",
+    # would be fed in as though it named a defect.
+    top_grade: str | None = None
 
 
 def load_eval_targets(path: str | Path) -> dict[str, EvalTarget]:
@@ -62,6 +66,10 @@ def load_eval_targets(path: str | Path) -> dict[str, EvalTarget]:
         if evaluator and not mappings:
             raise EvalDatasetError(f"{skill}: has an `evaluator` but no `column_mappings`")
 
+        top_grade = entry.get("top_grade") or None
+        if evaluator and not top_grade:
+            raise EvalDatasetError(f"{skill}: has an `evaluator` but no `top_grade`")
+
         targets[skill] = EvalTarget(
             skill=skill,
             dataset_id=dataset_id,
@@ -69,5 +77,6 @@ def load_eval_targets(path: str | Path) -> dict[str, EvalTarget]:
             evaluator=evaluator,
             eval_column=eval_column,
             column_mappings=mappings,
+            top_grade=top_grade,
         )
     return targets

@@ -67,7 +67,7 @@ class TestEvaluatorWiring:
         path = write(
             tmp_path,
             "skills:\n  s:\n    dataset: DS\n    evaluator: EV\n    eval_column: quality\n"
-            "    column_mappings:\n      output: output\n",
+            "    top_grade: excellent\n    column_mappings:\n      output: output\n",
         )
         target = load_eval_targets(path)["s"]
         assert (target.evaluator, target.eval_column) == ("EV", "quality")
@@ -98,3 +98,22 @@ class TestEvaluatorWiring:
     def test_the_checked_in_to_questionnaire_entry_is_wired(self):
         target = load_eval_targets(REPO_CONFIG)["to-questionnaire"]
         assert target.evaluator and target.eval_column == "questionnaire_quality"
+
+    def test_reads_the_top_grade(self, tmp_path):
+        path = write(
+            tmp_path,
+            "skills:\n  s:\n    dataset: DS\n    evaluator: EV\n    eval_column: q\n"
+            "    top_grade: excellent\n    column_mappings:\n      output: output\n",
+        )
+        assert load_eval_targets(path)["s"].top_grade == "excellent"
+
+    def test_rejects_an_evaluator_with_no_top_grade(self, tmp_path):
+        # Without it there is no way to tell a row that fell short from one that
+        # did not, and every explanation would be fed in as evidence of a defect.
+        path = write(
+            tmp_path,
+            "skills:\n  s:\n    dataset: DS\n    evaluator: EV\n    eval_column: q\n"
+            "    column_mappings:\n      output: output\n",
+        )
+        with pytest.raises(EvalDatasetError, match="top_grade"):
+            load_eval_targets(path)
