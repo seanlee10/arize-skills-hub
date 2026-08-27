@@ -127,3 +127,13 @@ class TestReadScores:
             ("solid", "compound"),
             ("excellent", "clean"),
         ]
+
+
+class TestExportPaging:
+    def test_the_export_streams_every_row(self):
+        # Without --all the export is one capped page, so a dataset at or over
+        # the cap would silently drop the rows the grades are read from.
+        runner = FakeRunner()
+        score_experiment(TARGET, "EXP1", "SPACE", "RUN", runner=runner)
+        export = next(c for c in runner.calls if c[:2] == ["experiments", "export"])
+        assert "--all" in export

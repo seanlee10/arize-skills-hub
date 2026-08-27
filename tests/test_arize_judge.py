@@ -291,3 +291,25 @@ def test_a_missing_verdict_reports_the_row_counts():
     detail = findings[0].detail
     assert "1 dataset row(s) for this run" in detail
     assert "0 verdict row(s) exported" in detail
+
+
+def test_both_exports_stream_every_row():
+    """`ax ... export` without --all returns one capped page (50 rows).
+
+    The scan appends to a long-lived shared dataset and then looks for its own
+    freshly appended row in the export. Once that dataset passed 50 rows the
+    row was outside the page, every skill came back unjudged, and the gate
+    failed closed on everything — for a paging reason, not a safety one.
+    """
+    runner = FakeRunner(
+        dataset_rows=[
+            {"id": "EX1", "additional_properties": {"skill_name": "dialog-summary",
+                                                    "scan_run_id": "RUN"}}
+        ],
+        verdict_rows=[{"example_id": "EX1",
+                       "additional_properties": {"eval.skill_safety.label": "PASS"}}],
+    )
+    judge_skills([BENIGN], CONFIG, "RUN", runner=runner)
+    exports = [c for c in runner.commands if c[1] == "export"]
+    assert len(exports) == 2
+    assert all("--all" in call for call in exports)

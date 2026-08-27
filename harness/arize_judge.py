@@ -241,12 +241,21 @@ def judge_skills(
     if finished.get("num_errors"):
         raise JudgeError(f"evaluation run reported {finished['num_errors']} errors")
 
+    # --all on both exports is load-bearing. Without it `ax ... export` returns
+    # one capped page of 50 rows. The scan appends to a long-lived shared dataset
+    # and then looks for its own freshly appended row in that export, so once the
+    # dataset passed 50 rows the row was outside the page: every skill came back
+    # unjudged and the gate failed closed on all of them, for a paging reason
+    # that reads nothing like one.
+    #
     # The dataset carries the input columns (skill_name, skill_body,
     # scan_run_id) under each example's additional_properties, keyed by the
     # example's top-level id. Only examples from this run are kept, so a
     # stale example from an earlier run on the shared dataset can never
     # supply this run's verdict for a same-named skill.
-    dataset_export = _with_retries(runner, ["datasets", "export", config.dataset_id, "--stdout"])
+    dataset_export = _with_retries(
+        runner, ["datasets", "export", config.dataset_id, "--stdout", "--all"]
+    )
     example_to_skill: dict[str, str] = {}
     for row in dataset_export.get("__list__", []):
         props = row.get("additional_properties") or {}
@@ -258,7 +267,9 @@ def judge_skills(
             continue
         example_to_skill[example_id] = name
 
-    exported = _with_retries(runner, ["experiments", "export", experiment_id, "--stdout"])
+    exported = _with_retries(
+        runner, ["experiments", "export", experiment_id, "--stdout", "--all"]
+    )
     runs = exported.get("__list__", [])
 
     label_key = f"eval.{config.eval_column}.label"

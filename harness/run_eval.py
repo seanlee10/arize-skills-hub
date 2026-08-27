@@ -153,7 +153,9 @@ def score_experiment(
     if finished.get("num_errors"):
         raise EvalRunError(f"{target.skill}: scoring reported {finished['num_errors']} errors")
 
-    exported = _with_retries(runner, ["experiments", "export", experiment_id, "--stdout"])
+    exported = _with_retries(
+        runner, ["experiments", "export", experiment_id, "--stdout", "--all"]
+    )
     return read_scores(exported.get("__list__", []), target.eval_column)
 
 
