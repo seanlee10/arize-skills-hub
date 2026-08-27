@@ -19,7 +19,7 @@ class FakeRunner:
         self.envs = []
         self.error = error
 
-    def __call__(self, args, timeout=900):
+    def __call__(self, args, timeout=900, expect=None):
         self.calls.append(args)
         self.envs.append(
             {

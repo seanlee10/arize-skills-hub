@@ -68,7 +68,7 @@ def _command_label(args: list[str]) -> str:
     return f"ax {subcommand}".strip()
 
 
-def run_cli(args: list[str], timeout: int = 900) -> dict:
+def run_cli(args: list[str], timeout: int = 900, expect: str | None = None) -> dict:
     """Run an `ax` command and parse the JSON it prints.
 
     `ax` writes progress lines and an upgrade banner to the same stream, so the
@@ -98,22 +98,46 @@ def run_cli(args: list[str], timeout: int = 900) -> dict:
         )
 
     out = ANSI_RE.sub("", completed.stdout)
-    start_obj = out.find("{")
-    start_arr = out.find("[")
-    candidates = [i for i in (start_obj, start_arr) if i >= 0]
-    if not candidates:
+    parsed = _extract_json(out, expect=expect)
+    if parsed is None:
         # The tail, not the command: when ax prints a traceback instead of a
         # result, that traceback is the only thing that says why.
         raise JudgeError(
             f"{_command_label(args)} printed no JSON. Last output:\n{out.strip()[-600:]}"
         )
-    start = min(candidates)
-    try:
-        parsed = json.loads(out[start:])
-    except json.JSONDecodeError as exc:
-        raise JudgeError(f"{_command_label(args)} printed unparsable JSON: {exc}") from exc
 
     return {"__list__": parsed} if isinstance(parsed, list) else parsed
+
+
+def _extract_json(out: str, expect: str | None = None):
+    """Return the JSON value `ax` printed, or None.
+
+    The result is the last thing on stdout, so candidates are tried from the end
+    backwards. Searching forward for the first "{" or "[" is unsound: when a task
+    row raises, `ax` exits 0 and prints a traceback, and a traceback quotes
+    source — `messages=[{"role": "user", ...}]` in this repo's own task file
+    parses far enough to look like the answer.
+
+    Only brackets that open a line are considered, since `ax` prints its JSON at
+    column zero, and that keeps a dict repr or a quoted fragment mid-line from
+    being tried at all.
+
+    `expect` names a key the caller needs. A run whose rows all failed prints
+    OpenTelemetry spans and no result, and a span is valid JSON at column zero;
+    without the key check the caller would get a span, raise KeyError, and bury
+    the traceback that says why the rows failed.
+    """
+    decoder = json.JSONDecoder()
+    starts = [m.start() for m in re.finditer(r"^[\{\[]", out, re.M)]
+    for start in reversed(starts):
+        try:
+            value, _ = decoder.raw_decode(out[start:])
+        except json.JSONDecodeError:
+            continue
+        if expect and isinstance(value, dict) and expect not in value:
+            continue
+        return value
+    return None
 
 
 def _with_retries(runner, args, timeout=900):
@@ -176,6 +200,7 @@ def judge_skills(
             "--task", str(ECHO_TASK),
         ],
         timeout=900,
+        expect="id",
     )
     experiment_id = experiment["id"]
 

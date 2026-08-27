@@ -38,7 +38,7 @@ class FakeRunner:
         self.num_errors = num_errors
         self.fail_on = fail_on
 
-    def __call__(self, args, timeout=900):
+    def __call__(self, args, timeout=900, expect=None):
         self.calls.append(args)
         head = " ".join(args[:2])
         if self.fail_on and head == self.fail_on:

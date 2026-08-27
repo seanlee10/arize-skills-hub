@@ -45,7 +45,7 @@ class FakeRunner:
         self.num_errors = num_errors
         self.commands = []
 
-    def __call__(self, args, timeout=900):
+    def __call__(self, args, timeout=900, expect=None):
         self.commands.append(args)
         if "datasets" in args and "append" in args:
             return {"id": "DATASET"}

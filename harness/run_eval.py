@@ -223,6 +223,7 @@ def run_evaluations(
                         "--task", str(TASK_PATH),
                     ],
                     timeout=1800,
+                    expect="id",
                 )
             except Exception as exc:  # noqa: BLE001 - ax failing at all fails the run
                 raise EvalRunError(f"{target.skill}: {exc}") from exc
