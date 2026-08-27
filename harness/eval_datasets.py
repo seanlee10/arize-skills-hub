@@ -30,6 +30,11 @@ class EvalTarget:
     # state before anyone has written a rubric.
     evaluator: str | None = None
     eval_column: str | None = None
+    # Template variable -> source column. Stated rather than derived from the
+    # dataset's columns: a rubric names the variables it wants, and mapping
+    # everything the dataset happens to carry would feed the evaluator inputs
+    # its prompt never asked for. "output" is the experiment's own output.
+    column_mappings: dict[str, str] | None = None
 
 
 def load_eval_targets(path: str | Path) -> dict[str, EvalTarget]:
@@ -53,11 +58,16 @@ def load_eval_targets(path: str | Path) -> dict[str, EvalTarget]:
             # which looks like an evaluator that returned nothing.
             raise EvalDatasetError(f"{skill}: has an `evaluator` but no `eval_column`")
 
+        mappings = entry.get("column_mappings") or None
+        if evaluator and not mappings:
+            raise EvalDatasetError(f"{skill}: has an `evaluator` but no `column_mappings`")
+
         targets[skill] = EvalTarget(
             skill=skill,
             dataset_id=dataset_id,
             reference=entry.get("reference") or None,
             evaluator=evaluator,
             eval_column=eval_column,
+            column_mappings=mappings,
         )
     return targets

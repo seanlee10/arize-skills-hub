@@ -63,13 +63,25 @@ class TestRepoConfig:
 
 
 class TestEvaluatorWiring:
-    def test_reads_the_evaluator_and_its_column(self, tmp_path):
+    def test_reads_the_evaluator_its_column_and_its_mappings(self, tmp_path):
+        path = write(
+            tmp_path,
+            "skills:\n  s:\n    dataset: DS\n    evaluator: EV\n    eval_column: quality\n"
+            "    column_mappings:\n      output: output\n",
+        )
+        target = load_eval_targets(path)["s"]
+        assert (target.evaluator, target.eval_column) == ("EV", "quality")
+        assert target.column_mappings == {"output": "output"}
+
+    def test_rejects_an_evaluator_with_no_column_mappings(self, tmp_path):
+        # The rubric names the variables it wants. Without them the evaluator
+        # would run against whatever the server defaults to.
         path = write(
             tmp_path,
             "skills:\n  s:\n    dataset: DS\n    evaluator: EV\n    eval_column: quality\n",
         )
-        target = load_eval_targets(path)["s"]
-        assert (target.evaluator, target.eval_column) == ("EV", "quality")
+        with pytest.raises(EvalDatasetError, match="column_mappings"):
+            load_eval_targets(path)
 
     def test_a_dataset_without_an_evaluator_is_allowed(self, tmp_path):
         # Producing outputs is useful before anyone has written a rubric.
