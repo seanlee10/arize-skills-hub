@@ -274,3 +274,20 @@ def test_mutating_call_failure_is_not_retried():
 
     append_calls = [c for c in commands if "append" in " ".join(c)]
     assert len(append_calls) == 1
+
+
+def test_a_missing_verdict_reports_the_row_counts():
+    """"No verdict" has two causes that look identical without the counts: the
+    run's own dataset row was never found, or verdicts came back and none
+    matched it."""
+    runner = FakeRunner(
+        dataset_rows=[
+            {"id": "EX1", "additional_properties": {"skill_name": "dialog-summary",
+                                                    "scan_run_id": "RUN"}}
+        ],
+        verdict_rows=[],
+    )
+    findings = judge_skills([BENIGN], CONFIG, "RUN", runner=runner)
+    detail = findings[0].detail
+    assert "1 dataset row(s) for this run" in detail
+    assert "0 verdict row(s) exported" in detail

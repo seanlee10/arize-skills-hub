@@ -77,6 +77,19 @@ jobs:
             python -m harness.run_eval $ARGS
           fi
 
+      - name: Keep the proposal
+        if: inputs.propose
+        # Runs before the scan and on failure, because a proposal that fails the
+        # gate is the one worth reading. Without this it lives only in the
+        # runner's working tree: the pull-request step is skipped, the branch is
+        # never pushed, and the thing that failed is gone.
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: proposed-skills
+          path: skills/*/SKILL.md
+          if-no-files-found: ignore
+
       - name: Scan the proposed skills
         if: inputs.propose
         # A proposal is a model-authored edit to a skill in a registry whose

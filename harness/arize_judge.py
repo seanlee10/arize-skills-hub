@@ -285,7 +285,16 @@ def judge_skills(
                     skill=skill.name,
                     source="judge",
                     severity="critical",
-                    detail="no verdict returned for this skill",
+                    # The counts are the whole diagnosis. "No verdict" has two
+                    # very different causes — the dataset row for this run was
+                    # not found (so nothing could be joined), or verdict rows
+                    # came back but none matched — and they are indistinguishable
+                    # without them.
+                    detail=(
+                        "no verdict returned for this skill "
+                        f"({len(example_to_skill)} dataset row(s) for this run, "
+                        f"{len(runs)} verdict row(s) exported)"
+                    ),
                 )
             )
             continue
