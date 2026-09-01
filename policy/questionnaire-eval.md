@@ -42,6 +42,18 @@ improvement loop, which reads these to decide what to change. If the theory
 holds, the answer is to split the criteria into separate judgements, not to keep
 this.
 
+## Measured under this version
+
+Both sides scored with the same rubric version, eight rows each, none lost:
+
+    original skill    5× SOLID, 3× WEAK        0.54
+    after the loop    6× EXCELLENT, 2× SOLID   0.92
+
+A score is only comparable against another taken with the same rubric version.
+The original skill scored 0.67 under the long-explanation wording and 0.54 under
+this one — the short rubric is harsher, not more lenient as expected, so a
+number carried across versions would have pointed the wrong way.
+
 ## Scale
 
 Four levels, so a change is visible. PASS/FAIL leaves the loop nothing to move.
