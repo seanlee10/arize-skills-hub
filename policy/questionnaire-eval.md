@@ -31,7 +31,15 @@ ignored it.
 
 Four levels, so a change is visible. PASS/FAIL leaves the loop nothing to move.
 
-    unusable 0 · weak 0.33 · solid 0.67 · excellent 1
+    UNUSABLE 0 · WEAK 0.33 · SOLID 0.67 · EXCELLENT 1
+
+Upper case, and the prompt forbids a qualifier. Version 1 used lower-case words
+and two of eight rows came back `NOT_PARSABLE` — the grader wrote a complete,
+well-reasoned explanation and then a label the choice list did not contain. Both
+failures were boundary calls ("Not enough to drop a grade.", "Minor."), which is
+where a hedged label like "solid, bordering on excellent" gets written. A row
+that fails this way is not a low score, it is a missing measurement, and it
+silently shrinks the denominator a before/after comparison depends on.
 
 ---
 
@@ -66,12 +74,14 @@ TARGETING THE GAP - Do the questions aim at what the recipient knows and the sen
 
 Grade the questionnaire:
 
-excellent - every criterion met; a recipient could answer it in one pass and the sender would have what they need.
-solid - meets the criteria with a minor lapse: one section thin, one question that could be sharper.
-weak - a criterion is clearly violated: a compound question, a needed item nobody asks about, context pitched at the wrong reader.
-unusable - the recipient could not usefully answer, or what came back would not resolve the sender's decision.
+EXCELLENT - every criterion met; a recipient could answer it in one pass and the sender would have what they need.
+SOLID - meets the criteria with a minor lapse: one section thin, one question that could be sharper.
+WEAK - a criterion is clearly violated: a compound question, a needed item nobody asks about, context pitched at the wrong reader.
+UNUSABLE - the recipient could not usefully answer, or what came back would not resolve the sender's decision.
 
 In your explanation, name the specific criterion and quote the specific text that decided the grade. A grade with no quoted evidence is not useful to anyone trying to improve the skill.
 
-Respond with exactly one word: unusable, weak, solid, or excellent.
+Many of these will sit between two grades. Say so in the explanation, then pick the lower of the two. Do not qualify the grade itself.
+
+Respond with exactly one of these four words and nothing else: UNUSABLE, WEAK, SOLID, EXCELLENT. No qualifier, no punctuation, no second word.
 ```
