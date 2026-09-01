@@ -13,11 +13,45 @@ Turn something the user can't answer alone into a **questionnaire**: a Markdown 
 
 2. **What do you need back?** Ask, in one exchange, the specific decisions or facts the user can't resolve alone and needs from this person. Done when you have a concrete list of what the user must walk away able to do or decide.
 
-3. **Write the questionnaire.** Draft questions aimed at the gap from steps 1–2, following the Document structure below. Write it to `to-questionnaire-<slug>.md` in the current directory (slug from the topic) and report the path. Done when the file exists and every item the user named in step 2 is covered by a question.
+3. **Write the questionnaire.** Draft questions aimed at the gap from steps 1–2, following the Document structure below. Done when every item the user named in step 2 is covered by a question.
+
+4. **Sweep for compound questions before saving.** Go through the draft one `###` heading at a time and apply the split test below to each. Split every question that fails it. Only then write the file to `to-questionnaire-<slug>.md` in the current directory (slug from the topic) and report the path. Done when no question in the file carries a second ask.
 
 ## Document structure
 
 Frame the document as a **discovery questionnaire**: the user lacks context, the recipient holds it. Order questions most-important-first, since async means you may only get one pass, and group them under `##` headings by theme once there are more than a handful. Write it using the template below.
+
+### One idea per question
+
+Every question is one ask with one answer stub. The failure to watch for is the tail clause: a question that reaches its point, then bolts on a second thing after an "and", an "or", a comma, or a second question mark. The recipient answers the front half, stops, and the tail is silently lost — and async means you don't get to follow up.
+
+**The split test.** Cover everything after the first ask. Is what remains still a question that would get you something on its own? If yes, it is a second ask. Give it its own `###` heading and its own stub.
+
+Split these:
+
+<wrong>
+### Could we run old and new systems in parallel, and what would that require?
+### Is there a runbook for most of what pages you, and is it current enough to follow at 3am?
+### Is rollback possible after cutover? For how long, and what makes it hard?
+### What has the customer complained about most often, and how recently?
+</wrong>
+
+<right>
+### Could we run the old and new systems in parallel?
+### If we ran them in parallel, what would that require from your team?
+### Is there a runbook for most of what pages you?
+### Are those runbooks current enough to follow at 3am?
+### What has the customer complained about most often?
+### When did they last raise it?
+</right>
+
+These are already one idea — leave them alone:
+
+- **A question and its justification:** "Which database would you pick, and why?" — the "why" has no answer without the pick.
+- **An either/or framing of one fact:** "Is the load spread evenly across the rotation, or concentrated on a few people?"
+- **One ask with examples after a dash:** "What external dependencies constrain maintenance — vendor contracts, unsupported runtimes, hardware?"
+
+Splitting costs a heading and a stub. Not splitting costs the answer.
 
 <questionnaire-template>
 
