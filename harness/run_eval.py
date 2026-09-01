@@ -58,6 +58,12 @@ class ScoreResult:
     mean: float | None
     scored: int
     unscored: int
+    # A label the evaluator could not turn into one of its choices — it returns
+    # NOT_PARSABLE and no score. Non-empty, so it used to be counted as a grade.
+    ungraded: int
+    # The task produced nothing for this row, i.e. it raised. `ax` exits 0 either
+    # way, so this count is the only place a failed generation surfaces.
+    no_output: int
     explanations: list[str]
     # (label, explanation) per scored row, so the improvement loop can take
     # evidence only from the rows that fell short.
@@ -67,8 +73,15 @@ class ScoreResult:
 def read_scores(rows: list[dict], eval_column: str) -> ScoreResult:
     """Pull the verdicts out of an experiment export.
 
-    A row the evaluator did not label is counted, not averaged. Treating it as a
-    zero would report a quality drop that nothing in the output caused.
+    Only a row with a numeric score is a grade. A row is counted instead — never
+    averaged as a zero, which would report a quality drop that nothing in the
+    output caused — when the evaluator returned no label, when it returned one it
+    could not score (NOT_PARSABLE), or when the task produced no output at all.
+
+    Those three are reported separately because they mean different things: a
+    mean over five of eight rows is not the same measurement as a mean over
+    eight, and a before/after comparison that quietly changes denominator is not
+    a comparison.
     """
     label_key = f"eval.{eval_column}.label"
     score_key = f"eval.{eval_column}.score"
@@ -79,17 +92,28 @@ def read_scores(rows: list[dict], eval_column: str) -> ScoreResult:
     explanations: list[str] = []
     paired: list[tuple[str, str]] = []
     unscored = 0
+    ungraded = 0
+    no_output = 0
 
     for row in rows:
         props = row.get("additional_properties") or {}
+        if not (row.get("output") or "").strip():
+            no_output += 1
+            unscored += 1
+            continue
+
         label = props.get(label_key)
+        value = props.get(score_key)
         if not label:
             unscored += 1
             continue
+        if not isinstance(value, (int, float)):
+            ungraded += 1
+            unscored += 1
+            continue
+
         labels[label] = labels.get(label, 0) + 1
-        value = props.get(score_key)
-        if isinstance(value, (int, float)):
-            scores.append(float(value))
+        scores.append(float(value))
         explanation = props.get(explanation_key) or ""
         if explanation:
             explanations.append(explanation)
@@ -100,6 +124,8 @@ def read_scores(rows: list[dict], eval_column: str) -> ScoreResult:
         mean=(sum(scores) / len(scores)) if scores else None,
         scored=sum(labels.values()),
         unscored=unscored,
+        ungraded=ungraded,
+        no_output=no_output,
         explanations=explanations,
         rows=paired,
     )
@@ -344,9 +370,20 @@ def render_summary(runs: list[EvalRun]) -> list[str]:
             grades, mean = "not scored", "—"
         else:
             grades = ", ".join(f"{n}× {label}" for label, n in sorted(score.labels.items()))
-            if score.unscored:
-                grades += f" (+{score.unscored} unscored)"
-            mean = "—" if score.mean is None else f"{score.mean:.2f}"
+            # Name what was dropped rather than only how much. A mean over five
+            # of eight rows is a different measurement from a mean over eight.
+            dropped = []
+            if score.no_output:
+                dropped.append(f"{score.no_output} no output")
+            if score.ungraded:
+                dropped.append(f"{score.ungraded} ungraded")
+            missing = score.unscored - score.no_output - score.ungraded
+            if missing:
+                dropped.append(f"{missing} unlabelled")
+            if dropped:
+                grades += f" (+{', '.join(dropped)})"
+            total = score.scored + score.unscored
+            mean = "—" if score.mean is None else f"{score.mean:.2f} of {score.scored}/{total}"
         lines.append(f"| `{run.skill}` | {grades or '—'} | {mean} | `{run.experiment_id}` |")
 
     # One explanation per skill, so the summary says *why* without becoming a

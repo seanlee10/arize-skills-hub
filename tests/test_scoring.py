@@ -137,3 +137,31 @@ class TestExportPaging:
         score_experiment(TARGET, "EXP1", "SPACE", "RUN", runner=runner)
         export = next(c for c in runner.calls if c[:2] == ["experiments", "export"])
         assert "--all" in export
+
+
+class TestUnusableRows:
+    def test_a_label_with_no_score_is_not_a_grade(self):
+        # The evaluator returns NOT_PARSABLE when it cannot turn its own answer
+        # into one of the choices. The label is non-empty, so counting it as a
+        # grade put a failure in the distribution and inflated the scored count
+        # while the mean quietly covered fewer rows than it claimed.
+        rows = [verdict("excellent", 1.0), verdict("NOT_PARSABLE", None)]
+        result = read_scores(rows, "questionnaire_quality")
+        assert result.labels == {"excellent": 1}
+        assert result.scored == 1
+        assert result.ungraded == 1
+        assert result.mean == pytest.approx(1.0)
+
+    def test_counts_a_row_the_task_produced_nothing_for(self):
+        # An empty output is a task that raised. ax exits 0 either way, so this
+        # count is the only place a failed generation shows up.
+        rows = [verdict("solid", 0.67), {"output": "", "additional_properties": {}}]
+        result = read_scores(rows, "questionnaire_quality")
+        assert result.no_output == 1
+        assert result.scored == 1
+
+    def test_a_mean_covers_only_the_rows_it_averaged(self):
+        rows = [verdict("excellent", 1.0), verdict("NOT_PARSABLE", None),
+                {"output": "", "additional_properties": {}}]
+        result = read_scores(rows, "questionnaire_quality")
+        assert (result.scored, result.ungraded, result.no_output) == (1, 1, 1)

@@ -20,11 +20,12 @@ on:
         default: false
 
 # Write access is scoped to this workflow, which is manual-dispatch only, and it
-# is used for exactly one thing: pushing a branch and opening a pull request that
-# a person reads. Nothing here writes to main.
+# is used for exactly one thing: pushing a proposal to its own branch. Nothing
+# here writes to main, and the pull request is opened by a person from the link
+# in the summary — this repository is a gate, and letting Actions open pull
+# requests into it is a permission it does not need in order to do its job.
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
   evaluate:
@@ -110,13 +111,11 @@ jobs:
             python -m harness.static_scan --skill "$(dirname "$f")"
           done
 
-      - name: Open a pull request
+      - name: Push the proposal to a branch
         if: inputs.propose
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if git diff --quiet -- 'skills/*/SKILL.md'; then
-            echo "No skill was rewritten — no pull request to open."
+            echo "No skill was rewritten — no branch to push."
             exit 0
           fi
           # The branch name is built from the run id alone. `skill` is free text
@@ -130,19 +129,18 @@ jobs:
           git commit -m "Rewrite scanned skills from their evaluation shortfalls"
           git push -u origin "$BRANCH"
           {
-            echo "Proposed by the evaluation loop, from the graded rows that fell short."
             echo
-            echo "The evaluation and the grades are in the run that produced this:"
-            echo "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo "### Proposal pushed"
             echo
-            echo "These edits have passed the static scan. They have **not** been"
-            echo "re-evaluated — run the evaluation on this branch to see whether the"
-            echo "score actually moved, and read the diff on its own merits either way."
+            echo "Open the pull request from here:"
+            echo
+            echo "${{ github.server_url }}/${{ github.repository }}/compare/main...$BRANCH?expand=1"
+            echo
+            echo "These edits passed the static scan. They have **not** been re-evaluated —"
+            echo "run this workflow on the branch to see whether the score actually moved,"
+            echo "and read the diff on its own merits either way."
             echo
             echo '```'
             git diff --stat main -- 'skills/*/SKILL.md'
             echo '```'
-          } > /tmp/pr-body.md
-          gh pr create --base main --head "$BRANCH" \
-            --title "Rewrite skills from their evaluation shortfalls" \
-            --body-file /tmp/pr-body.md
+          } >> "$GITHUB_STEP_SUMMARY"
