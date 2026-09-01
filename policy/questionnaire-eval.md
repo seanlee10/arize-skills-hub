@@ -27,6 +27,21 @@ note that a wrapper was present — that observation is exactly the kind of thin
 the improvement loop should act on, and it would be lost if the rubric silently
 ignored it.
 
+## Diagnostic in progress: the explanation is deliberately short
+
+Four wordings of this rubric lost between two and six of eight rows to
+`NOT_PARSABLE` — a complete, well-argued explanation followed by a label the
+choice list did not contain — and the failure rate did not track the wording.
+The suspicion is weight rather than phrasing: the scan's evaluator, a short
+prompt with a binary label, has never failed this way, while this one asks for
+six criteria, quoted evidence for each, a note on the wrapper, and then an enum.
+
+This version cuts the explanation to a sentence or two to test that. It is a
+measurement, not a destination: a short explanation is worse fuel for the
+improvement loop, which reads these to decide what to change. If the theory
+holds, the answer is to split the criteria into separate judgements, not to keep
+this.
+
 ## Scale
 
 Four levels, so a change is visible. PASS/FAIL leaves the loop nothing to move.
@@ -56,7 +71,7 @@ What the sender needs back: {needed_back}
 {output}
 --- END OUTPUT ---
 
-The output may be wrapped in narration, a reported file path, or a code fence. Read past any wrapper and judge the questionnaire itself. Do not raise or lower the grade for the wrapper; instead state in your explanation whether one was present and what it was.
+The output may be wrapped in narration, a reported file path, or a code fence. Read past any wrapper and judge the questionnaire itself. Do not raise or lower the grade for the wrapper.
 
 Judge the questionnaire on the criteria the skill sets for itself:
 
@@ -79,9 +94,9 @@ SOLID - meets the criteria with a minor lapse: one section thin, one question th
 WEAK - a criterion is clearly violated: a compound question, a needed item nobody asks about, context pitched at the wrong reader.
 UNUSABLE - the recipient could not usefully answer, or what came back would not resolve the sender's decision.
 
-In your explanation, name the specific criterion and quote the specific text that decided the grade. A grade with no quoted evidence is not useful to anyone trying to improve the skill.
+In one or two sentences, name the criterion that decided the grade and quote the text that decided it.
 
-Many of these will sit between two grades. Say so in the explanation, then pick the lower of the two. Do not qualify the grade itself.
+When a questionnaire sits between two grades, give it the lower one.
 
 Respond with exactly one of these four words and nothing else: UNUSABLE, WEAK, SOLID, EXCELLENT. No qualifier, no punctuation, no second word.
 ```
